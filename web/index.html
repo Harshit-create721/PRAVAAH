@@ -1,0 +1,183 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PRAVAAH — conveyor integrity</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&family=Noto+Sans+Devanagari:wght@500;600&family=Saira+Condensed:wght@500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/style.css">
+</head>
+<body>
+
+<header class="topbar">
+  <div class="brand">
+    <!-- A troughed belt seen end-on, loaded, with the material flowing away
+         from the reader. The trough is the silhouette of a mining conveyor;
+         the chevrons are the pravaah. -->
+    <svg class="mark" viewBox="0 0 24 24" aria-hidden="true">
+      <path d="M7.6 10.8C9.6 6.9 14.4 6.9 16.4 10.8Z" fill="currentColor" opacity="0.42"/>
+      <path d="M2.2 15.6 7.4 10.8H16.6L21.8 15.6" fill="none" stroke="currentColor"
+            stroke-width="1.5" stroke-linejoin="round" stroke-linecap="round"/>
+      <path d="M9.2 17.1 12 19.2 14.8 17.1" fill="none" stroke="currentColor"
+            stroke-width="1.35" stroke-linecap="round" stroke-linejoin="round" opacity="0.5"/>
+      <path d="M9.2 19.9 12 22 14.8 19.9" fill="none" stroke="currentColor"
+            stroke-width="1.35" stroke-linecap="round" stroke-linejoin="round" opacity="0.85"/>
+    </svg>
+    <div>
+      <div class="brand-name">PRAVAAH<span lang="hi">प्रवाह</span></div>
+      <div class="brand-sub">Conveyor integrity &middot; <b id="siteLabel">&mdash;</b></div>
+    </div>
+  </div>
+
+  <nav class="conveyor-tabs" id="conveyorTabs"></nav>
+
+  <div class="link-block">
+    <div class="link-item"><span class="dot" id="wsDot"></span><span id="wsLabel">LINK</span></div>
+    <div class="link-item"><span class="dot" id="mqttDot"></span><span id="mqttLabel">BROKER</span></div>
+    <div class="clock" id="clock">--:--:--</div>
+  </div>
+</header>
+
+<div id="banner" class="banner hidden"></div>
+
+<main class="grid">
+
+  <!-- ROW 1 -------------------------------------------------------------- -->
+  <section class="panel risk-panel" id="riskPanel">
+    <div class="panel-head"><h2>Conveyor state</h2><span class="src" id="riskSource">&mdash;</span></div>
+    <div class="risk-body">
+      <div class="risk-badge" id="riskBadge" data-risk="unknown">
+        <div class="risk-word" id="riskWord">NO DATA</div>
+        <div class="risk-note" id="riskNote">no packet received</div>
+      </div>
+      <dl class="risk-facts">
+        <div><dt>Operating state</dt><dd id="opState">&mdash;</dd></div>
+        <div><dt>Last packet</dt><dd id="lastPacket">never</dd></div>
+        <div><dt>Joints tracked</dt><dd id="jointCount">0</dd></div>
+        <div><dt>Open alarms</dt><dd id="alarmCount">0</dd></div>
+      </dl>
+    </div>
+  </section>
+
+  <section class="panel schematic-panel">
+    <div class="panel-head">
+      <h2>Machine</h2>
+      <div class="view-btns" role="group" aria-label="Camera position">
+        <button data-view="iso" aria-pressed="true">ISO</button>
+        <button data-view="side" aria-pressed="false">SIDE</button>
+        <button data-view="top" aria-pressed="false">TOP</button>
+        <button data-view="head" aria-pressed="false">HEAD</button>
+        <button data-view="tail" aria-pressed="false">TAIL</button>
+      </div>
+      <button class="ghost-btn" id="viewReset" title="Reset the camera">Reset</button>
+      <span class="src" id="schematicSrc">joints appear as their markers are detected</span>
+    </div>
+
+    <div class="schematic-body">
+      <div class="schematic-wrap">
+        <svg id="schematic" viewBox="0 0 872 420" preserveAspectRatio="xMidYMid meet"
+             tabindex="0" role="application"
+             aria-label="3D conveyor model. Drag or use arrow keys to rotate, scroll or +/- to zoom. Tab to reach each part.">
+        </svg>
+        <div class="comp-tip" id="compTip" role="status" aria-live="polite"></div>
+      </div>
+
+      <aside class="part-col">
+        <div class="pc-head">
+          <span>Component health</span>
+          <span class="src" id="componentSrc">&mdash;</span>
+        </div>
+        <div class="pc-list" id="componentList"></div>
+      </aside>
+    </div>
+
+    <div class="sch-key">
+      <span data-s="healthy">nominal</span>
+      <span data-s="observe">approaching limit</span>
+      <span data-s="planned_inspection">plan inspection</span>
+      <span data-s="urgent_inspection">urgent</span>
+      <span data-s="no_rule">sensed, no rule yet</span>
+      <span data-s="unmonitored">unmonitored — no sensor</span>
+    </div>
+  </section>
+
+  <!-- ROW 2 -------------------------------------------------------------- -->
+  <section class="panel channels-panel">
+    <div class="panel-head"><h2>Live channels</h2><span class="src" id="channelSrc">&mdash;</span></div>
+    <div id="channelGroups"></div>
+  </section>
+
+  <section class="panel trend-panel">
+    <div class="panel-head">
+      <h2>Trend</h2>
+      <select id="trendChannel" class="select"></select>
+      <select id="trendWindow" class="select">
+        <option value="5">5 min</option>
+        <option value="15" selected>15 min</option>
+        <option value="60">1 hour</option>
+        <option value="360">6 hours</option>
+      </select>
+    </div>
+    <div class="chart-wrap"><canvas id="trendChart"></canvas><div class="chart-empty" id="trendEmpty">No stored samples in this window</div></div>
+  </section>
+
+  <!-- ROW 3 -------------------------------------------------------------- -->
+  <section class="panel joints-panel">
+    <div class="panel-head"><h2>Joints &amp; splices</h2><span class="src" id="jointSrc">&mdash;</span></div>
+    <div class="table-scroll">
+      <table class="dtable" id="jointTable">
+        <thead><tr>
+          <th>Joint</th><th>Risk</th><th class="num">Passes</th><th class="num">Baseline</th>
+          <th class="num">L/R asym</th><th class="num">Impact RMS</th><th class="num">Crack</th><th class="num">Last seen</th>
+        </tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="panel alarms-panel">
+    <div class="panel-head"><h2>Alarms</h2><span class="src" id="alarmSrc">rule layer</span></div>
+    <div class="alarm-list" id="alarmList"></div>
+  </section>
+
+  <!-- ROW 4 -------------------------------------------------------------- -->
+  <section class="panel nodes-panel">
+    <div class="panel-head"><h2>Sensor nodes</h2><span class="src" id="nodeSrc">&mdash;</span></div>
+    <div class="node-list" id="nodeList"></div>
+  </section>
+
+  <section class="panel gaps-panel">
+    <div class="panel-head"><h2>Not yet connected</h2><span class="src">rules that cannot run</span></div>
+    <div class="gap-list" id="gapList"></div>
+  </section>
+
+  <section class="panel ingest-panel">
+    <div class="panel-head"><h2>Ingest</h2><span class="src" id="ingestSrc">&mdash;</span></div>
+    <div class="ingest-body">
+      <dl class="ingest-stats" id="ingestStats"></dl>
+      <div class="reject-head">Rejected payloads</div>
+      <div class="reject-list" id="rejectList"></div>
+    </div>
+  </section>
+
+</main>
+
+<!-- Joint detail drawer -->
+<aside class="drawer" id="drawer" aria-hidden="true">
+  <div class="drawer-head">
+    <div>
+      <div class="drawer-title" id="drawerTitle">&mdash;</div>
+      <div class="drawer-sub" id="drawerSub">&mdash;</div>
+    </div>
+    <button class="ghost-btn" id="drawerClose" aria-label="Close">Close</button>
+  </div>
+  <div class="drawer-body" id="drawerBody"></div>
+</aside>
+<div class="scrim" id="scrim"></div>
+
+<script src="/scene3d.js"></script>
+<script type="module" src="/app.js"></script>
+</body>
+</html>

@@ -1,0 +1,754 @@
+<title>PRAVAAH Bring-Up Guide</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans+Condensed:wght@500;600;700&family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;1,400&display=swap" rel="stylesheet">
+
+<style>
+/* ── tokens ─────────────────────────────────────────────────────────────
+   Light is the primary world: this is a bench reference, printed and read
+   under work lights. The dark set is a full equal, not an inversion.      */
+:root {
+  --paper:      #eceff1;
+  --surface:    #f8fafb;
+  --surface-2:  #e2e7ea;
+  --ink:        #10181d;
+  --ink-soft:   #4a5b66;
+  --ink-faint:  #77878f;
+  --rule:       #c6d0d6;
+  --rule-soft:  #dae1e5;
+  --accent:     #12768f;
+  --accent-bg:  #dceef3;
+  --ok:         #17795a;
+  --caution:    #a4650f;
+  --danger:     #a8342a;
+  --danger-bg:  #f7e6e4;
+  --caution-bg: #f7eddc;
+
+  --f-display: 'IBM Plex Sans Condensed', 'Segoe UI Semibold', system-ui, sans-serif;
+  --f-body:    'IBM Plex Sans', 'Segoe UI', system-ui, sans-serif;
+  --f-mono:    'IBM Plex Mono', 'Cascadia Mono', Consolas, monospace;
+
+  --gutter: 92px;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --paper:      #0b1015;
+    --surface:    #121a20;
+    --surface-2:  #1a242b;
+    --ink:        #ccd8de;
+    --ink-soft:   #93a5b0;
+    --ink-faint:  #66787f;
+    --rule:       #253138;
+    --rule-soft:  #1c262c;
+    --accent:     #4cb4d8;
+    --accent-bg:  #10242c;
+    --ok:         #35b189;
+    --caution:    #d3982f;
+    --danger:     #e0685c;
+    --danger-bg:  #241211;
+    --caution-bg: #221a0d;
+  }
+}
+:root[data-theme="dark"] {
+  --paper:      #0b1015;
+  --surface:    #121a20;
+  --surface-2:  #1a242b;
+  --ink:        #ccd8de;
+  --ink-soft:   #93a5b0;
+  --ink-faint:  #66787f;
+  --rule:       #253138;
+  --rule-soft:  #1c262c;
+  --accent:     #4cb4d8;
+  --accent-bg:  #10242c;
+  --ok:         #35b189;
+  --caution:    #d3982f;
+  --danger:     #e0685c;
+  --danger-bg:  #241211;
+  --caution-bg: #221a0d;
+}
+
+/* ── base ──────────────────────────────────────────────────────────── */
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--f-body);
+  font-size: 15px;
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+}
+
+.sheet {
+  max-width: 940px;
+  margin: 0 auto;
+  padding: 0 32px 96px;
+}
+
+a { color: var(--accent); text-decoration-thickness: 1px; text-underline-offset: 2px; }
+a:hover { color: var(--ink); }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+/* ── masthead ──────────────────────────────────────────────────────── */
+.masthead {
+  padding: 56px 0 28px;
+  border-bottom: 2px solid var(--ink);
+  margin-bottom: 4px;
+}
+.stamp {
+  display: flex; gap: 14px; align-items: baseline; flex-wrap: wrap;
+  font-family: var(--f-mono); font-size: 10.5px; letter-spacing: 0.16em;
+  text-transform: uppercase; color: var(--ink-faint);
+  margin-bottom: 20px;
+}
+.stamp b { color: var(--accent); font-weight: 600; }
+.masthead h1 {
+  font-family: var(--f-display); font-weight: 700;
+  font-size: clamp(38px, 7vw, 62px); line-height: 1.0;
+  letter-spacing: -0.015em; margin: 0 0 14px; text-wrap: balance;
+}
+.deck {
+  font-size: 18px; line-height: 1.5; color: var(--ink-soft);
+  max-width: 62ch; margin: 0;
+}
+.deck em { color: var(--ink); font-style: normal; font-weight: 600; }
+.rule-thin {
+  height: 1px; background: var(--ink); margin-bottom: 44px; opacity: 0.35;
+}
+
+/* ── the thesis callout ────────────────────────────────────────────── */
+.thesis {
+  background: var(--accent-bg);
+  border-left: 3px solid var(--accent);
+  padding: 22px 26px;
+  margin: 0 0 48px;
+}
+.thesis p { margin: 0; font-size: 17px; line-height: 1.55; max-width: 64ch; }
+.thesis strong { font-weight: 600; }
+
+/* ── sections with numbered gutter ─────────────────────────────────── */
+.step {
+  display: grid;
+  grid-template-columns: var(--gutter) minmax(0, 1fr);
+  gap: 0 28px;
+  padding: 38px 0;
+  border-top: 1px solid var(--rule);
+}
+.step:first-of-type { border-top: 2px solid var(--ink); }
+
+.step-mark {
+  font-family: var(--f-mono); font-size: 11px; letter-spacing: 0.14em;
+  text-transform: uppercase; color: var(--ink-faint);
+  padding-top: 6px;
+}
+.step-mark .n {
+  display: block; font-family: var(--f-display); font-weight: 700;
+  font-size: 34px; line-height: 1; letter-spacing: -0.01em;
+  color: var(--accent); margin-bottom: 6px;
+}
+.step-body { min-width: 0; }
+.step-body > *:first-child { margin-top: 0; }
+.step-body > *:last-child { margin-bottom: 0; }
+
+h2 {
+  font-family: var(--f-display); font-weight: 600;
+  font-size: 27px; line-height: 1.15; letter-spacing: -0.008em;
+  margin: 0 0 14px; text-wrap: balance;
+}
+h3 {
+  font-family: var(--f-display); font-weight: 600;
+  font-size: 17px; letter-spacing: 0.01em;
+  margin: 30px 0 10px; color: var(--ink);
+}
+p { margin: 0 0 14px; max-width: 68ch; }
+p.lede { font-size: 16.5px; color: var(--ink-soft); }
+ul, ol { margin: 0 0 14px; padding-left: 20px; max-width: 68ch; }
+li { margin-bottom: 7px; }
+li::marker { color: var(--ink-faint); }
+code {
+  font-family: var(--f-mono); font-size: 0.87em;
+  background: var(--surface-2); padding: 1px 5px; border-radius: 2px;
+  color: var(--ink);
+}
+strong { font-weight: 600; }
+
+/* ── diagram ───────────────────────────────────────────────────────── */
+.diagram {
+  background: var(--surface);
+  border: 1px solid var(--rule);
+  padding: 26px 22px 18px;
+  margin: 0 0 10px;
+  overflow-x: auto;
+}
+.diagram svg { display: block; min-width: 620px; width: 100%; height: auto; }
+.dg-label {
+  font-family: var(--f-mono); font-size: 9.5px; letter-spacing: 0.13em;
+  text-transform: uppercase; fill: var(--ink-faint);
+}
+.dg-node { font-family: var(--f-body); font-size: 12.5px; font-weight: 500; fill: var(--ink); }
+.dg-sub  { font-family: var(--f-mono); font-size: 9.5px; fill: var(--ink-faint); }
+.caption {
+  font-family: var(--f-mono); font-size: 10.5px; letter-spacing: 0.05em;
+  color: var(--ink-faint); margin: 0 0 22px;
+}
+
+/* ── tables ────────────────────────────────────────────────────────── */
+.twrap { overflow-x: auto; margin: 0 0 18px; border: 1px solid var(--rule); }
+table { width: 100%; border-collapse: collapse; font-size: 13.5px; min-width: 560px; }
+thead th {
+  font-family: var(--f-mono); font-size: 9.5px; font-weight: 500;
+  letter-spacing: 0.13em; text-transform: uppercase;
+  color: var(--ink-faint); text-align: left;
+  padding: 10px 14px; background: var(--surface-2);
+  border-bottom: 1px solid var(--rule); white-space: nowrap;
+}
+tbody td {
+  padding: 10px 14px; border-bottom: 1px solid var(--rule-soft);
+  vertical-align: top;
+}
+tbody tr:last-child td { border-bottom: none; }
+tbody tr:nth-child(even) td { background: var(--surface); }
+td.mono, th.mono { font-family: var(--f-mono); font-size: 12.5px; white-space: nowrap; font-variant-numeric: tabular-nums; }
+td.pin { font-family: var(--f-mono); font-size: 12.5px; font-weight: 600; color: var(--accent); white-space: nowrap; }
+.warn-cell { color: var(--danger); font-weight: 600; }
+
+/* ── code blocks ───────────────────────────────────────────────────── */
+pre {
+  font-family: var(--f-mono); font-size: 12.5px; line-height: 1.65;
+  background: var(--surface); border: 1px solid var(--rule);
+  border-left: 3px solid var(--accent);
+  padding: 16px 18px; margin: 0 0 18px;
+  overflow-x: auto; color: var(--ink);
+}
+pre .c { color: var(--ink-faint); }
+pre .k { color: var(--accent); }
+pre .s { color: var(--ok); }
+
+/* ── notices ───────────────────────────────────────────────────────── */
+.notice {
+  border: 1px solid; padding: 16px 20px; margin: 0 0 18px;
+  display: grid; grid-template-columns: auto minmax(0,1fr); gap: 0 14px;
+}
+.notice .tag {
+  font-family: var(--f-mono); font-size: 9.5px; letter-spacing: 0.14em;
+  text-transform: uppercase; font-weight: 500; padding-top: 3px; white-space: nowrap;
+}
+.notice p { margin: 0 0 8px; max-width: 62ch; }
+.notice p:last-child { margin-bottom: 0; }
+.notice.danger  { border-color: var(--danger);  background: var(--danger-bg); }
+.notice.danger .tag  { color: var(--danger); }
+.notice.caution { border-color: var(--caution); background: var(--caution-bg); }
+.notice.caution .tag { color: var(--caution); }
+
+/* ── verification checklist ────────────────────────────────────────── */
+.checks { display: flex; flex-direction: column; gap: 0; margin: 0 0 18px; border: 1px solid var(--rule); }
+.check {
+  display: grid; grid-template-columns: 26px minmax(0,1fr);
+  gap: 0 14px; padding: 14px 18px;
+  border-bottom: 1px solid var(--rule-soft);
+  background: var(--surface);
+}
+.check:last-child { border-bottom: none; }
+.check .box {
+  width: 15px; height: 15px; border: 1.5px solid var(--ink-faint);
+  margin-top: 4px; border-radius: 1px;
+}
+.check .what { font-weight: 600; font-size: 14px; margin: 0 0 3px; }
+.check .how { font-size: 13px; color: var(--ink-soft); margin: 0; max-width: 60ch; }
+.check .how code { font-size: 0.88em; }
+
+/* ── colophon ──────────────────────────────────────────────────────── */
+.colophon {
+  border-top: 2px solid var(--ink); margin-top: 44px; padding-top: 20px;
+  display: flex; justify-content: space-between; gap: 20px; flex-wrap: wrap;
+  font-family: var(--f-mono); font-size: 10.5px; letter-spacing: 0.08em;
+  color: var(--ink-faint); text-transform: uppercase;
+}
+
+/* ── responsive ────────────────────────────────────────────────────── */
+@media (max-width: 720px) {
+  :root { --gutter: 0px; }
+  .sheet { padding: 0 20px 64px; }
+  .step { grid-template-columns: 1fr; gap: 0; }
+  .step-mark { display: flex; align-items: baseline; gap: 10px; padding: 0 0 10px; }
+  .step-mark .n { font-size: 26px; margin: 0; }
+}
+
+/* ── print: this is the point of the document ──────────────────────── */
+@media print {
+  :root {
+    --paper: #fff; --surface: #fff; --surface-2: #f0f2f3;
+    --ink: #000; --ink-soft: #333; --ink-faint: #555;
+    --rule: #999; --rule-soft: #ccc; --accent: #0a5568; --accent-bg: #f0f5f7;
+    --danger-bg: #fff; --caution-bg: #fff;
+  }
+  @page { margin: 15mm; }
+  body { font-size: 10.5pt; line-height: 1.45; }
+  .sheet { max-width: none; padding: 0; }
+  .masthead { padding-top: 0; }
+  .step { break-inside: avoid; page-break-inside: avoid; padding: 20px 0; }
+  .twrap, pre, .notice, .diagram, .checks { break-inside: avoid; page-break-inside: avoid; }
+  h2, h3 { break-after: avoid; page-break-after: avoid; }
+  .no-print { display: none !important; }
+  a { color: #000; text-decoration: none; }
+  table { min-width: 0; font-size: 9pt; }
+  .diagram svg { min-width: 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * { animation: none !important; transition: none !important; }
+}
+</style>
+
+<div class="sheet">
+
+<header class="masthead">
+  <div class="stamp">
+    <span><b>PRAVAAH</b> &middot; conveyor integrity</span>
+    <span>SIH26008 &middot; Ministry of Steel</span>
+    <span>Rev 0.1 &middot; Aug 2026</span>
+  </div>
+  <h1>Sensor bring-up</h1>
+  <p class="deck">
+    Wiring, flashing and verification for the conveyor joint-monitoring rig &mdash;
+    in the order that isolates a fault to <em>one</em> thing at a time.
+  </p>
+</header>
+<div class="rule-thin"></div>
+
+<div class="thesis">
+  <p>
+    <strong>The dashboard never talks to a sensor.</strong> It only ever receives JSON
+    on an MQTT topic. So &ldquo;connecting a sensor&rdquo; means making the ESP32
+    publish a field with the right name &mdash; which is why every sensor is
+    independent, and why you bring them up one at a time rather than all at once.
+  </p>
+</div>
+
+<div class="diagram">
+<svg viewBox="0 0 880 210" role="img" aria-label="Signal chain from sensors through the ESP32 and MQTT broker to the browser">
+  <!-- build/running divider -->
+  <line x1="416" y1="14" x2="416" y2="186" stroke="var(--rule)" stroke-width="1" stroke-dasharray="4 4"/>
+  <text class="dg-label" x="200" y="12" text-anchor="middle">You build this week</text>
+  <text class="dg-label" x="650" y="12" text-anchor="middle">Already running</text>
+
+  <!-- sensors -->
+  <g>
+    <rect x="8" y="34" width="118" height="118" fill="var(--surface-2)" stroke="var(--rule)"/>
+    <text class="dg-node" x="67" y="58" text-anchor="middle">Sensors</text>
+    <text class="dg-sub" x="67" y="80" text-anchor="middle">Hall / LM393</text>
+    <text class="dg-sub" x="67" y="96" text-anchor="middle">ADXL345</text>
+    <text class="dg-sub" x="67" y="112" text-anchor="middle">MLX90614</text>
+    <text class="dg-sub" x="67" y="128" text-anchor="middle">SCT-013</text>
+  </g>
+  <path d="M126 93 H164" stroke="var(--accent)" stroke-width="1.5" marker-end="url(#ar)"/>
+  <text class="dg-sub" x="145" y="86" text-anchor="middle">GPIO</text>
+
+  <!-- esp32 -->
+  <g>
+    <rect x="170" y="52" width="118" height="82" fill="var(--surface)" stroke="var(--accent)" stroke-width="1.5"/>
+    <text class="dg-node" x="229" y="82" text-anchor="middle">ESP32</text>
+    <text class="dg-sub" x="229" y="102" text-anchor="middle">reads + builds</text>
+    <text class="dg-sub" x="229" y="117" text-anchor="middle">JSON frame</text>
+  </g>
+  <path d="M288 93 H352" stroke="var(--accent)" stroke-width="1.5" marker-end="url(#ar)"/>
+  <text class="dg-sub" x="320" y="86" text-anchor="middle">WiFi</text>
+  <text class="dg-sub" x="320" y="108" text-anchor="middle">MQTT :1883</text>
+
+  <!-- gateway -->
+  <g>
+    <rect x="440" y="30" width="184" height="126" fill="var(--surface)" stroke="var(--rule)"/>
+    <text class="dg-node" x="532" y="52" text-anchor="middle">Gateway (laptop)</text>
+    <line x1="452" y1="62" x2="612" y2="62" stroke="var(--rule-soft)"/>
+    <text class="dg-sub" x="532" y="80" text-anchor="middle">broker &rarr; validate</text>
+    <text class="dg-sub" x="532" y="98" text-anchor="middle">&rarr; SQLite &rarr; rules</text>
+    <text class="dg-sub" x="532" y="116" text-anchor="middle">&rarr; alarms</text>
+    <text class="dg-sub" x="532" y="140" text-anchor="middle">one node process</text>
+  </g>
+  <path d="M624 93 H688" stroke="var(--accent)" stroke-width="1.5" marker-end="url(#ar)"/>
+  <text class="dg-sub" x="656" y="86" text-anchor="middle">WebSocket</text>
+
+  <!-- browser -->
+  <g>
+    <rect x="694" y="52" width="118" height="82" fill="var(--surface-2)" stroke="var(--rule)"/>
+    <text class="dg-node" x="753" y="82" text-anchor="middle">Dashboard</text>
+    <text class="dg-sub" x="753" y="102" text-anchor="middle">localhost:8811</text>
+    <text class="dg-sub" x="753" y="117" text-anchor="middle">or phone on WiFi</text>
+  </g>
+
+  <!-- camera branch -->
+  <path d="M300 176 H440 V156" stroke="var(--rule)" stroke-width="1.5" fill="none" marker-end="url(#ar2)"/>
+  <text class="dg-sub" x="228" y="180" text-anchor="middle">USB camera &rarr; vision_node.py</text>
+
+  <defs>
+    <marker id="ar" markerWidth="7" markerHeight="7" refX="6" refY="3.5" orient="auto">
+      <path d="M0 0 L7 3.5 L0 7 z" fill="var(--accent)"/>
+    </marker>
+    <marker id="ar2" markerWidth="7" markerHeight="7" refX="6" refY="3.5" orient="auto">
+      <path d="M0 0 L7 3.5 L0 7 z" fill="var(--rule)"/>
+    </marker>
+  </defs>
+</svg>
+</div>
+<p class="caption">Everything right of the dashed line is built and running. Your week is the left half.</p>
+
+<!-- ─────────────────────────────────────────────────────────────────── -->
+<section class="step">
+  <div class="step-mark"><span class="n">01</span>Network first</div>
+  <div class="step-body">
+    <h2>Prove the path with zero sensors</h2>
+    <p class="lede">
+      Do this before you wire anything. It separates a WiFi/broker problem from a
+      sensor problem &mdash; and those two failures look identical if you tackle
+      them together.
+    </p>
+
+    <p>Flash the sketch with all six <code>ENABLE_*</code> flags left at <code>0</code>, and only these set:</p>
+
+<pre><span class="c">// firmware/beltguard_node/beltguard_node.ino</span>
+<span class="k">#define</span> WIFI_SSID   <span class="s">"your-ssid"</span>
+<span class="k">#define</span> WIFI_PASS   <span class="s">"your-password"</span>
+<span class="k">#define</span> MQTT_HOST   <span class="s">"192.168.1.6"</span>     <span class="c">// whatever start-beltguard.bat printed</span>
+<span class="k">#define</span> CONVEYOR_ID <span class="s">"CV-01"</span>           <span class="c">// must match server/config.js</span>
+<span class="k">#define</span> NODE_ID     <span class="s">"esp32-drive-01"</span>  <span class="c">// any unique name</span></pre>
+
+    <p>
+      Serial monitor at <code>115200</code> prints the ESP32's IP, then
+      <code>MQTT connect... ok</code>. On the dashboard, <em>Sensor nodes</em> flips
+      from <code>NO NODE HAS ANNOUNCED ITSELF</code> to a green
+      <code>esp32-drive-01 &middot; LIVE</code> &mdash; and every channel still reads
+      <code>NO SIGNAL</code>.
+    </p>
+    <p>
+      That is exactly right: <strong>a live node with no live channels.</strong>
+      Network proven, nothing faked.
+    </p>
+
+    <h3>If the node never appears</h3>
+    <p>It is almost always one of three things, in this order of likelihood:</p>
+    <ul>
+      <li>The firewall rules were never added (they need an Administrator prompt, once).</li>
+      <li><code>MQTT_HOST</code> is the wrong address &mdash; a <code>169.254.x.x</code> is a dead link-local adapter, not your LAN.</li>
+      <li>The ESP32 joined a different subnet. Common where the factory runs a separate guest WiFi.</li>
+    </ul>
+
+<pre>netsh advfirewall firewall add rule name=<span class="s">"BeltGuard MQTT"</span> dir=in action=allow protocol=TCP localport=1883
+netsh advfirewall firewall add rule name=<span class="s">"BeltGuard HTTP"</span> dir=in action=allow protocol=TCP localport=8811</pre>
+  </div>
+</section>
+
+<!-- ─────────────────────────────────────────────────────────────────── -->
+<section class="step">
+  <div class="step-mark"><span class="n">02</span>Wiring</div>
+  <div class="step-body">
+    <h2>One sensor, one flag, one reflash</h2>
+    <p class="lede">
+      Every sensor is three wires &mdash; <code>VCC</code>, <code>GND</code>, signal.
+      Only the signal pin differs. Wire it, flip its single flag, reflash. That
+      channel changes from <code>NO SIGNAL</code> to a number with a green
+      <code>LIVE</code> badge within half a second, and nothing else on screen moves.
+    </p>
+
+    <div class="twrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Sensor</th><th>Signal&nbsp;&rarr;&nbsp;pin</th><th>Power</th>
+            <th>Flag to set</th><th>Channel that lights up</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Speed &mdash; Hall A3144 or LM393</td>
+            <td class="pin">GPIO 27</td><td class="mono">5 V (VIN)</td>
+            <td class="mono">ENABLE_SPEED</td>
+            <td class="mono">belt_speed, motor_rpm</td>
+          </tr>
+          <tr>
+            <td>Joint marker, left edge</td>
+            <td class="pin">GPIO 26</td><td class="mono">5 V (VIN)</td>
+            <td class="mono">ENABLE_MARKER</td>
+            <td>the joint table appears</td>
+          </tr>
+          <tr>
+            <td>Joint marker, right edge</td>
+            <td class="pin">GPIO 25</td><td class="mono">5 V (VIN)</td>
+            <td class="mono">ENABLE_MARKER_R</td>
+            <td>L/R asymmetry rule</td>
+          </tr>
+          <tr>
+            <td>ADXL345 accelerometer</td>
+            <td class="pin">GPIO 21 / 22</td>
+            <td class="mono warn-cell">3.3 V only</td>
+            <td class="mono">ENABLE_ADXL</td>
+            <td class="mono">vibration_rms, kurtosis, crest</td>
+          </tr>
+          <tr>
+            <td>MLX90614 IR thermometer</td>
+            <td class="pin">GPIO 21 / 22</td>
+            <td class="mono warn-cell">3.3 V only</td>
+            <td class="mono">ENABLE_MLX</td>
+            <td class="mono">temperature, ambient</td>
+          </tr>
+          <tr>
+            <td>SCT-013 current clamp</td>
+            <td class="pin">GPIO 34</td>
+            <td class="mono">via burden board</td>
+            <td class="mono">ENABLE_CT</td>
+            <td class="mono">motor_current_rms</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <p>
+      <strong>GPIO 21 and 22 are the shared I²C bus.</strong> The ADXL345 and the
+      MLX90614 both sit on it at different addresses, so they coexist on the same
+      two wires &mdash; add 4.7&nbsp;k&Omega; pull-ups to 3V3. Keep one common ground,
+      starred at the ESP32. Avoid GPIO 6&ndash;11 (flash), and don't hang anything
+      that pulls at boot on GPIO 0, 2, 12 or 15.
+    </p>
+
+    <div class="notice danger">
+      <span class="tag">Hazard</span>
+      <div>
+        <p>
+          The <strong>ADXL345 is a 3.3&nbsp;V part</strong> &mdash; 5&nbsp;V on its
+          VCC destroys it immediately. The LM393 breakouts want 5&nbsp;V, and their
+          <code>D0</code> output is open-collector, so it is safe to feed a 3.3&nbsp;V
+          GPIO through the pull-up.
+        </p>
+        <p>
+          The <strong>SCT-013 clamps around one conductor</strong> &mdash; never in
+          series, never opened while the primary is energised. It needs a burden
+          resistor and a 1.65&nbsp;V bias divider before GPIO 34; wired raw it swings
+          negative and kills the ADC. A qualified electrician does the panel-side
+          work. Do not clamp anything on a VFD output.
+        </p>
+      </div>
+    </div>
+
+    <p>
+      If the factory won't allow a CT at all, ask whether the VFD already reports
+      current over Modbus. That path is safer <em>and</em> better data, and the
+      gateway can read it instead.
+    </p>
+  </div>
+</section>
+
+<!-- ─────────────────────────────────────────────────────────────────── -->
+<section class="step">
+  <div class="step-mark"><span class="n">03</span>The marker</div>
+  <div class="step-body">
+    <h2>The one sensor the project stands on</h2>
+    <p class="lede">
+      Speed and vibration are context. The marker is what turns a belt into a set of
+      individually tracked joints &mdash; without it there is no per-splice history
+      and no project.
+    </p>
+
+    <div class="twrap">
+      <table>
+        <thead><tr><th>Option</th><th>Reads through</th><th>&asymp; &#8377;</th><th>Watch out</th></tr></thead>
+        <tbody>
+          <tr><td><strong>Hall A3144 + magnet</strong></td><td>dust, rubber, water</td><td class="mono">60</td><td><strong>Recommended.</strong> Solid state, no contact bounce, survives a factory.</td></tr>
+          <tr><td>Reed switch + magnet</td><td>dust, rubber, water</td><td class="mono">80</td><td>Magnet must be bonded, not bolted. Fast belts need a fast reed.</td></tr>
+          <tr><td>Slot / IR + reflective tag</td><td>needs line of sight</td><td class="mono">50</td><td>Dust and belt dressing kill it. Fine on a clean airport belt.</td></tr>
+          <tr><td>RFID tag + reader</td><td>dust</td><td class="mono">1200+</td><td>Overkill for the MVP; worth a slide in the mining-pilot proposal.</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <p>
+      Wire whichever you pick exactly where the slot sensor would go &mdash; the
+      firmware treats them identically, with a 20&nbsp;ms debounce in the ISR.
+    </p>
+
+    <h3>What happens on the first trigger</h3>
+    <p>
+      <code>J01</code> appears in the joint table showing <code>1/20</code> under
+      Baseline. Run the belt clean for twenty laps and it fills to <code>20/20</code>,
+      then <strong>locks</strong>. From that point every pass is compared against that
+      joint's own history and the rules begin firing.
+    </p>
+    <p>
+      Before those twenty laps the dashboard deliberately shows no risk for the joint.
+      It has nothing to compare against yet, and it will not pretend otherwise. The
+      lock matters too: it is what stops a slowly degrading joint from dragging its
+      own reference along with it.
+    </p>
+  </div>
+</section>
+
+<!-- ─────────────────────────────────────────────────────────────────── -->
+<section class="step">
+  <div class="step-mark"><span class="n">04</span>Contract</div>
+  <div class="step-body">
+    <h2>What the ESP32 actually sends</h2>
+    <p class="lede">
+      Topics are <code>beltguard/&lt;site&gt;/&lt;conveyor&gt;/&lt;kind&gt;</code>.
+      The live version is served at <code>/api/contract</code> &mdash; check there
+      first when a value refuses to appear.
+    </p>
+
+    <div class="twrap">
+      <table>
+        <thead><tr><th>Topic</th><th>Published by</th><th>When</th></tr></thead>
+        <tbody>
+          <tr><td class="mono">beltguard/factory/CV-01/telemetry</td><td>ESP32</td><td>every 500&nbsp;ms</td></tr>
+          <tr><td class="mono">beltguard/factory/CV-01/joint</td><td>ESP32</td><td>each marker passage</td></tr>
+          <tr><td class="mono">beltguard/factory/CV-01/vision</td><td>camera node</td><td>each marker passage</td></tr>
+          <tr><td class="mono">beltguard/factory/CV-01/analysis</td><td>your model, later</td><td>whenever it scores</td></tr>
+          <tr><td class="mono">beltguard/factory/CV-01/node/&lt;id&gt;/status</td><td>every node</td><td>retained + last will</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+<pre><span class="c">// telemetry &mdash; omit any field this node did not measure</span>
+{ <span class="s">"ts"</span>: 1756012345678, <span class="s">"node"</span>: <span class="s">"esp32-drive-01"</span>, <span class="s">"seq"</span>: 10422,
+  <span class="s">"motor_current_rms"</span>: 6.42, <span class="s">"belt_speed"</span>: 1.83, <span class="s">"motor_rpm"</span>: 1452,
+  <span class="s">"vibration_rms"</span>: 0.084, <span class="s">"temperature"</span>: 41.2, <span class="s">"ambient"</span>: 29.8,
+  <span class="s">"sensor_health"</span>: { <span class="s">"speed"</span>: <span class="s">"healthy"</span>, <span class="s">"ct"</span>: <span class="s">"missing"</span> } }
+
+<span class="c">// joint &mdash; the ESP32 half of one passage</span>
+{ <span class="s">"ts"</span>: 1756012345678, <span class="s">"joint_id"</span>: <span class="s">"J01"</span>, <span class="s">"lap"</span>: 214, <span class="s">"belt_speed"</span>: 1.83,
+  <span class="s">"joint_marker_dt_left"</span>: 812.4, <span class="s">"joint_marker_dt_right"</span>: 828.9,
+  <span class="s">"marker_distance_left"</span>: 1486.7, <span class="s">"event_vibration_rms"</span>: 0.31 }</pre>
+
+    <p>
+      The camera publishes <code>vision</code> carrying the <em>same</em>
+      <code>joint_id</code> and <code>lap</code>. The gateway merges the two into one
+      pass record &mdash; which is why the camera node must count laps the same way
+      the ESP32 does, one increment per marker detection.
+    </p>
+
+    <h3>Three rules that keep the data honest</h3>
+    <ul>
+      <li><strong>Omit what you did not measure.</strong> No <code>0</code>, no <code>-1</code>, no <code>null</code>. Absent means absent, and the dashboard says so.</li>
+      <li><strong>Out-of-range is rejected, not clamped.</strong> A clamped value is an invented value.</li>
+      <li><strong>Field names are fixed.</strong> Anything else is ignored silently.</li>
+    </ul>
+  </div>
+</section>
+
+<!-- ─────────────────────────────────────────────────────────────────── -->
+<section class="step">
+  <div class="step-mark"><span class="n">05</span>Verify</div>
+  <div class="step-body">
+    <h2>Bring-up checklist</h2>
+    <p class="lede">
+      Each line is a thing you can see, not a thing you assume. Work down in order
+      &mdash; a failure at any step is contained to that step.
+    </p>
+
+    <div class="checks">
+      <div class="check"><div class="box"></div><div>
+        <p class="what">Gateway running</p>
+        <p class="how">Double-click <code>start-beltguard.bat</code>. It prints the IP for <code>MQTT_HOST</code>, then <code>[broker] mqtt://0.0.0.0:1883</code>.</p>
+      </div></div>
+      <div class="check"><div class="box"></div><div>
+        <p class="what">Dashboard reachable</p>
+        <p class="how"><code>http://localhost:8811</code> shows <code>NO DATA / no packet received yet</code> and 15/15 channels at <code>NO SIGNAL</code>.</p>
+      </div></div>
+      <div class="check"><div class="box"></div><div>
+        <p class="what">Node announces itself</p>
+        <p class="how">All flags at 0. <em>Sensor nodes</em> shows the node <code>LIVE</code>, channels unchanged.</p>
+      </div></div>
+      <div class="check"><div class="box"></div><div>
+        <p class="what">Speed reads true</p>
+        <p class="how">Chalk mark and stopwatch over ten laps must agree with <code>belt_speed</code> within 2%. If not, fix <code>PULSES_PER_REV</code> and <code>WHEEL_CIRC_MM</code> before going further &mdash; everything downstream inherits this error.</p>
+      </div></div>
+      <div class="check"><div class="box"></div><div>
+        <p class="what">Joint appears</p>
+        <p class="how">Marker sensor triggers once per lap; <code>J01</code> enters the joint table and the lap count climbs steadily.</p>
+      </div></div>
+      <div class="check"><div class="box"></div><div>
+        <p class="what">Baseline locks</p>
+        <p class="how">Twenty clean laps. The joint row reads <code>20/20</code> and rules start evaluating.</p>
+      </div></div>
+      <div class="check"><div class="box"></div><div>
+        <p class="what">Geometry entered</p>
+        <p class="how">Fill <code>pulleyDiameterMm</code>, <code>gearRatio</code> and <code>beltLengthM</code> in <code>server/config.js</code>. The amber banner clears and the slip rule switches on.</p>
+      </div></div>
+      <div class="check"><div class="box"></div><div>
+        <p class="what">Controlled fault detected</p>
+        <p class="how">On a <em>spare</em> joint only. An alarm fires carrying the numbers that produced it.</p>
+      </div></div>
+    </div>
+
+    <h3>When a channel won't appear</h3>
+    <p>
+      Watch the <em>Ingest</em> panel &mdash; it is the fastest debugger on the rig.
+      A field with a typo'd name is ignored silently; an implausible value is
+      rejected with the reason printed:
+    </p>
+<pre>20:31:34  telemetry  belt_speed=9999: outside plausible range 0..12 m/s
+20:31:27  telemetry  motor_current_rms=six point three: not a finite number</pre>
+    <p>
+      Node <code>LIVE</code>, channel <code>NO SIGNAL</code>, nothing being rejected?
+      Then the field name doesn't match the contract.
+    </p>
+  </div>
+</section>
+
+<!-- ─────────────────────────────────────────────────────────────────── -->
+<section class="step">
+  <div class="step-mark"><span class="n">06</span>Discipline</div>
+  <div class="step-body">
+    <h2>The one rule that protects the whole dataset</h2>
+
+    <div class="notice caution">
+      <span class="tag">Do not</span>
+      <div>
+        <p>
+          <strong>Never flip an <code>ENABLE_*</code> flag to make the screen look
+          fuller.</strong> The moment you publish a number no sensor produced, the
+          joint baseline learns it &mdash; and every deviation calculation after that
+          is measured against a fiction.
+        </p>
+        <p>
+          That is why all six flags ship at <code>0</code> rather than <code>1</code>,
+          and why a missing channel renders as <code>NO SIGNAL</code> rather than a
+          plausible-looking zero.
+        </p>
+      </div>
+    </div>
+
+    <p>
+      The same applies to the bench harness in <code>tools/</code>. It exists to prove
+      the topics route and the rules fire before hardware exists &mdash; it is a
+      wire-protocol test, not a demo mode. It publishes under a <code>bench-*</code>
+      node id and forces a red banner across the dashboard for as long as it runs.
+      Kill it and delete <code>data/beltguard.db</code> before the first real capture,
+      so bench rows never contaminate a baseline.
+    </p>
+
+    <div class="notice danger">
+      <span class="tag">Safety</span>
+      <div>
+        <p>
+          Lockout/tagout before mounting anything; never adjust a moving conveyor.
+          Mount sensors, markers and cameras so they cannot become a snag, a
+          projectile or a source of belt damage &mdash; bond tags outside the
+          load-carrying area and clear of the splice itself.
+        </p>
+        <p>
+          Do not modify an airport or X-ray machine's radiation generator, curtains,
+          interlocks or certified control chain.
+          <strong>The alarms are decision support, not a safety system.</strong>
+          Nothing here is wired to stop a machine, and it must not be until it has
+          been validated, hazard-assessed and interlocked properly.
+        </p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<footer class="colophon">
+  <span>PRAVAAH &middot; sensor bring-up &middot; rev 0.1</span>
+  <span>Full reference: README.md in the project root</span>
+</footer>
+
+</div>
