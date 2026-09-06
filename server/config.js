@@ -31,6 +31,15 @@ export default {
     rawDays: 14,
   },
 
+  // Outbound link to the public relay. The gateway dials out, so nothing here
+  // requires inbound network access. Set `enabled: false` to run purely local.
+  relay: {
+    enabled: true,
+    url: 'wss://api.sih.shubhang.dev/publish',
+    // Must match RELAY_PUBLISH_SECRET on the relay. null = relay accepts anyone.
+    publishSecret: process.env.RELAY_PUBLISH_SECRET || null,
+  },
+
   // A node is LIVE if it published within `liveMs`, STALE past that,
   // OFFLINE past `offlineMs`. Tune to your publish rate.
   freshness: { liveMs: 3000, staleMs: 10000, offlineMs: 30000 },

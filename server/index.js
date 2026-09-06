@@ -17,6 +17,7 @@ import { Store } from './store.js';
 import { CHANNELS, JOINT_CHANNELS, validate, normaliseHealth, TOPICS } from './schema.js';
 import { evaluateJointPass, evaluateTelemetry, inferOperatingState, worse } from './rules.js';
 import { componentStatus } from './components.js';
+import { createRelayPublisher } from './relay-publisher.js';
 
 const ROOT = resolve(import.meta.dirname, '..');
 const WEB = join(ROOT, 'web');
@@ -58,6 +59,52 @@ for (const c of config.conveyors) {
     });
   }
 }
+
+// Mirror what the local dashboard already receives up to the public relay, and
+// execute commands the relay routes back down. Reads and writes both arrive
+// here; there is no second code path for remote clients.
+const relayPublisher = config.relay?.enabled
+  ? createRelayPublisher({
+      url: config.relay.url,
+      secret: config.relay.publishSecret,
+      log: (line) => console.log(line),
+      onCommand: async ({ action, payload }) => {
+        if (action === 'history') {
+          const cid = payload.conveyor ?? config.conveyors[0].id;
+          const channel = payload.channel;
+          if (!channel || !CHANNELS[channel]) throw new Error(`unknown channel: ${channel}`);
+          const minutes = Number(payload.minutes ?? 15);
+          return {
+            channel,
+            unit: CHANNELS[channel].unit,
+            points: store.history(cid, channel, Date.now() - minutes * 60000),
+          };
+        }
+
+        if (action === 'ack') {
+          const id = Number(payload.alarmId);
+          if (!Number.isFinite(id)) throw new Error('alarmId required');
+          store.ackAlarm(id, payload.by ?? 'mobile');
+          pushSnapshot();
+          return { acked: id };
+        }
+
+        if (action === 'close') {
+          const id = Number(payload.alarmId);
+          if (!Number.isFinite(id)) throw new Error('alarmId required');
+          store.closeAlarm(id, payload.outcome, payload.technician, payload.notes);
+          for (const [key, value] of openKeys) if (value === id) openKeys.delete(key);
+          for (const cv of live.values()) recomputeRisk(cv);
+          pushSnapshot();
+          return { closed: id };
+        }
+
+        throw new Error(`unknown action: ${action}`);
+      },
+    })
+  : null;
+
+relayPublisher?.start();
 
 const nodeSeen = new Map(); // nodeId -> { ts, conveyor, meta }
 
@@ -530,6 +577,8 @@ server.on('error', (e) => {
 function broadcast(msg) {
   const s = JSON.stringify(msg);
   for (const ws of wss.clients) if (ws.readyState === 1) ws.send(s);
+  // Same payload, second sink. Anything the dashboard sees, the phone sees.
+  relayPublisher?.send(msg);
 }
 
 // Coalesce pushes: telemetry can arrive faster than a browser needs redrawing.
