@@ -759,6 +759,10 @@ test('publish requires the secret when one is configured', async (t) => {
   t.after(() => relay.close());
 
   const bad = new WebSocket(`${url}/publish`);
+  // ws emits 'error' before 'close' on a destroyed socket, and an unhandled
+  // 'error' on an EventEmitter throws. Without this the test fails for the
+  // wrong reason instead of asserting the rejection.
+  bad.on('error', () => {});
   const [code] = await once(bad, 'close');
   assert.equal(code >= 4000 || code === 1006, true, 'unauthenticated publisher must be rejected');
 
@@ -806,6 +810,7 @@ test('an unknown path is refused rather than upgraded', async (t) => {
   t.after(() => relay.close());
 
   const ws = new WebSocket(`${url}/nope`);
+  ws.on('error', () => {});   // same reason as the rejected-publisher test above
   const [code] = await once(ws, 'close');
   assert.ok(code, 'unknown upgrade paths must not become subscribers');
 });
@@ -1131,7 +1136,11 @@ test('publishes snapshots once connected', async (t) => {
   pub.start();
   t.after(() => pub.stop());
 
-  await relay.waitFor(() => true).catch(() => {});
+  // Poll the connection flag rather than waiting on a message the publisher
+  // never sends on connect - that would burn the full waitFor timeout.
+  for (let i = 0; i < 100 && !pub.connected; i++) await new Promise((r) => setTimeout(r, 10));
+  assert.equal(pub.connected, true);
+
   pub.send({ type: 'snapshot', conveyors: [{ id: 'CV-01' }] });
 
   const msg = await relay.waitFor((m) => m.type === 'snapshot');
