@@ -1,13 +1,14 @@
 import { createRelayServer } from './server.js';
 
 const PORT = Number(process.env.PORT ?? 3040);
+const HOST = process.env.HOST ?? '127.0.0.1';
 const relay = createRelayServer({
   publishSecret: process.env.RELAY_PUBLISH_SECRET || null,
   writeToken: process.env.RELAY_WRITE_TOKEN || null,
 });
 
-const port = await relay.listen(PORT);
-console.log(`[relay] listening on 127.0.0.1:${port}`);
+const port = await relay.listen(PORT, HOST);
+console.log(`[relay] listening on ${HOST}:${port}`);
 console.log(`[relay] publish secret ${process.env.RELAY_PUBLISH_SECRET ? 'set' : 'NOT set'}`);
 console.log(`[relay] write token ${process.env.RELAY_WRITE_TOKEN ? 'set (writes gated)' : 'NOT set (writes open)'}`);
 

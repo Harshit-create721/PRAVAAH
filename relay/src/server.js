@@ -95,9 +95,9 @@ export function createRelayServer({ publishSecret = null, writeToken = null, sta
     server,
     hub,
     state,
-    listen(port) {
+    listen(port, host = '127.0.0.1') {
       return new Promise((resolve) => {
-        server.listen(port, '127.0.0.1', () => resolve(server.address().port));
+        server.listen(port, host, () => resolve(server.address().port));
       });
     },
     close() {
