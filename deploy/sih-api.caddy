@@ -1,0 +1,19 @@
+api.sih.shubhang.dev {
+	encode zstd gzip
+
+	header {
+		Strict-Transport-Security "max-age=31536000"
+		X-Content-Type-Options "nosniff"
+		Referrer-Policy "no-referrer"
+		-Server
+	}
+
+	# Caddy forwards Upgrade/Connection headers unchanged, so WebSocket
+	# proxying needs no special directive.
+	reverse_proxy 127.0.0.1:3040
+
+	log {
+		output stdout
+		format json
+	}
+}
