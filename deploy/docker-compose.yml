@@ -7,9 +7,17 @@ services:
     # Bound to loopback only. Caddy is the sole path in from the internet.
     ports:
       - "127.0.0.1:3040:3040"
+    # Values come from /opt/sih-relay/.env, which deploy-relay.sh writes 0600
+    # on the droplet. `docker compose` reads .env from its project directory
+    # automatically - naming it here makes that explicit and makes compose fail
+    # loudly if it is missing, instead of silently interpolating an empty
+    # publish secret from a non-interactive ssh shell (which is what shipped an
+    # OPEN /publish endpoint to production).
+    env_file:
+      - .env
     environment:
       PORT: "3040"
-      RELAY_PUBLISH_SECRET: "${RELAY_PUBLISH_SECRET:-}"
+      RELAY_PUBLISH_SECRET: "${RELAY_PUBLISH_SECRET:?RELAY_PUBLISH_SECRET must be set in /opt/sih-relay/.env}"
       RELAY_WRITE_TOKEN: "${RELAY_WRITE_TOKEN:-}"
     # Hard cap. Five production services share this box; the relay must never
     # be the reason one of them gets OOM-killed.

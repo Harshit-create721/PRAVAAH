@@ -284,6 +284,80 @@ the ESP32 does — one increment per marker detection.
 
 ---
 
+## 5a. Reaching the dashboard from outside the network — the relay
+
+Everything above assumes you are on the same network as the gateway. The relay
+lifts that restriction, so a phone can read live state from anywhere without
+port forwarding, a static IP, or any change to your router.
+
+```
+  ESP32 nodes --USB--> gateway laptop
+                            |  outbound WSS (no inbound ports)
+                            v
+                       relay container  ->  https://api.sih.shubhang.dev
+                            ^
+                            |  WSS + HTTPS
+                       phone / browser
+```
+
+**The gateway dials out.** That is the whole point: it works from behind any NAT
+or captive portal that permits outbound HTTPS. The relay holds only the most
+recent snapshot in memory and replays it to each client on connect — nothing is
+persisted there, and the gateway's SQLite remains the sole system of record.
+
+### Endpoints
+
+| Path | Who | What |
+|------|-----|------|
+| `wss://…/publish` | the gateway, authenticated | snapshots, alarm events, command results |
+| `wss://…/subscribe` | phones and browsers | snapshots, alarm events, `gatewayState` |
+| `GET /health` | anyone | liveness, `gatewayOnline`, `stale`, subscriber count |
+| `GET /state` | anyone | the cached snapshot, or **503** if nothing has ever published |
+
+Reads are open by design. Writes (`ack`, `close`) are gated by
+`RELAY_WRITE_TOKEN` only when one is set; `history` is a read and is never
+gated. Every relay message carries `serverTs` so a client can correct for clock
+skew — a phone's clock is not the gateway's.
+
+**Stale data is never presented as live.** If the gateway disconnects, or goes
+quiet for longer than the staleness window, the relay marks the cached snapshot
+`stale: true` and tells connected subscribers. A half-open laptop that vanished
+without closing its socket is caught by a 10 s ping sweep rather than left
+looking healthy.
+
+### Environment
+
+| Variable | Where | Required |
+|----------|-------|----------|
+| `RELAY_PUBLISH_SECRET` | relay **and** gateway | **Yes** whenever the relay binds anything but loopback. The relay refuses to start otherwise. |
+| `RELAY_WRITE_TOKEN` | relay, and any client that writes | No. Unset means writes are open. |
+| `HOST` / `PORT` | relay | Default `127.0.0.1:3040`. The container sets `HOST=0.0.0.0`; the host publish stays `127.0.0.1:3040`, so Caddy is the only way in. |
+
+Set the secret before deploying — see `deploy/.env.example`:
+
+```bash
+export RELAY_PUBLISH_SECRET="$(openssl rand -hex 32)"
+./deploy/deploy-relay.sh
+```
+
+The deploy script refuses to run without it, writes a `0600` `.env` on the
+droplet, waits for the container's health endpoint **before** touching Caddy,
+validates the Caddy config before reloading, and removes its own vhost fragment
+if anything fails — the box it lands on hosts other production sites.
+
+### Running it locally
+
+```bash
+cd relay && npm install && npm start   # binds 127.0.0.1:3040, no secret needed
+npm test                               # from the repo root, runs every suite
+```
+
+Set `relay.enabled: false` in `server/config.js` to run the gateway with no
+relay at all. The local dashboard never depends on it: if the relay is
+unreachable the gateway keeps serving on `:8811` and retries in the background.
+
+---
+
 ## 6. Calibration — do this before you trust a single number
 
 Nothing below is optional. Every derived figure inherits these errors.

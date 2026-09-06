@@ -62,49 +62,26 @@ for (const c of config.conveyors) {
 
 // Mirror what the local dashboard already receives up to the public relay, and
 // execute commands the relay routes back down. Reads and writes both arrive
-// here; there is no second code path for remote clients.
+// here and are executed by `executeCommand`, which is the SAME function the
+// local HTTP routes call - there is genuinely no second code path for remote
+// clients.
 const relayPublisher = config.relay?.enabled
   ? createRelayPublisher({
       url: config.relay.url,
       secret: config.relay.publishSecret,
       log: (line) => console.log(line),
-      onCommand: async ({ action, payload }) => {
-        if (action === 'history') {
-          const cid = payload.conveyor ?? config.conveyors[0].id;
-          const channel = payload.channel;
-          if (!channel || !CHANNELS[channel]) throw new Error(`unknown channel: ${channel}`);
-          const minutes = Number(payload.minutes ?? 15);
-          return {
-            channel,
-            unit: CHANNELS[channel].unit,
-            points: store.history(cid, channel, Date.now() - minutes * 60000),
-          };
-        }
-
-        if (action === 'ack') {
-          const id = Number(payload.alarmId);
-          if (!Number.isFinite(id)) throw new Error('alarmId required');
-          store.ackAlarm(id, payload.by ?? 'mobile');
-          pushSnapshot();
-          return { acked: id };
-        }
-
-        if (action === 'close') {
-          const id = Number(payload.alarmId);
-          if (!Number.isFinite(id)) throw new Error('alarmId required');
-          store.closeAlarm(id, payload.outcome, payload.technician, payload.notes);
-          for (const [key, value] of openKeys) if (value === id) openKeys.delete(key);
-          for (const cv of live.values()) recomputeRisk(cv);
-          pushSnapshot();
-          return { closed: id };
-        }
-
-        throw new Error(`unknown action: ${action}`);
-      },
+      onCommand: executeCommand,
     })
   : null;
 
-relayPublisher?.start();
+// The relay is an addition to the local dashboard, never a precondition for it.
+// A malformed `config.relay.url` must cost the operator remote access, not the
+// display at the belt.
+try {
+  relayPublisher?.start();
+} catch (err) {
+  console.error(`[relay] disabled after start-up failure: ${err?.message ?? err}`);
+}
 
 const nodeSeen = new Map(); // nodeId -> { ts, conveyor, meta }
 
@@ -479,6 +456,51 @@ async function readBody(req) {
   try { return JSON.parse(Buffer.concat(chunks).toString('utf8')); } catch { return {}; }
 }
 
+/**
+ * Every gateway action a client can ask for, local or remote, in one place.
+ *
+ * The relay routes `history`, `ack` and `close` down to `onCommand`, and the
+ * dashboard reaches the same three through HTTP. Both call THIS function, so
+ * there is exactly one implementation of what an ack means, one place where
+ * closing an alarm reopens the risk calculation, and no way for the two paths
+ * to drift apart.
+ */
+async function executeCommand({ action, payload = {} }) {
+  if (action === 'history') {
+    const cid = payload.conveyor ?? config.conveyors[0].id;
+    const channel = payload.channel;
+    if (!channel || !CHANNELS[channel]) throw new Error(`unknown channel: ${channel}`);
+    const minutes = Number(payload.minutes ?? 15);
+    return {
+      channel,
+      unit: CHANNELS[channel].unit,
+      points: store.history(cid, channel, Date.now() - minutes * 60000),
+    };
+  }
+
+  if (action === 'ack') {
+    const id = Number(payload.alarmId);
+    if (!Number.isFinite(id)) throw new Error('alarmId required');
+    store.ackAlarm(id, payload.by ?? 'mobile');
+    pushSnapshot();
+    return { acked: id };
+  }
+
+  if (action === 'close') {
+    const id = Number(payload.alarmId);
+    if (!Number.isFinite(id)) throw new Error('alarmId required');
+    store.closeAlarm(id, payload.outcome, payload.technician, payload.notes);
+    // Closing the alarm must also clear the key that suppressed re-raising it,
+    // or the same fault stays invisible until the process restarts.
+    for (const [key, value] of openKeys) if (value === id) openKeys.delete(key);
+    for (const cv of live.values()) recomputeRisk(cv);
+    pushSnapshot();
+    return { closed: id };
+  }
+
+  throw new Error(`unknown action: ${action}`);
+}
+
 const server = http.createServer(async (req, res) => {
   const url = new URL(req.url, `http://${req.headers.host ?? 'localhost'}`);
   const p = url.pathname;
@@ -486,14 +508,18 @@ const server = http.createServer(async (req, res) => {
   if (p === '/api/state') return json(res, 200, snapshot());
 
   if (p === '/api/history') {
-    const cid = url.searchParams.get('conveyor') ?? config.conveyors[0].id;
-    const channel = url.searchParams.get('channel');
-    const minutes = Number(url.searchParams.get('minutes') ?? 15);
-    if (!channel || !CHANNELS[channel]) return json(res, 400, { error: 'unknown channel' });
-    return json(res, 200, {
-      channel, unit: CHANNELS[channel].unit,
-      points: store.history(cid, channel, Date.now() - minutes * 60000),
-    });
+    try {
+      return json(res, 200, await executeCommand({
+        action: 'history',
+        payload: {
+          conveyor: url.searchParams.get('conveyor') ?? undefined,
+          channel: url.searchParams.get('channel'),
+          minutes: url.searchParams.get('minutes') ?? undefined,
+        },
+      }));
+    } catch (err) {
+      return json(res, 400, { error: err.message });
+    }
   }
 
   if (p.startsWith('/api/joint/')) {
@@ -514,20 +540,28 @@ const server = http.createServer(async (req, res) => {
   const ack = p.match(/^\/api\/alarms\/(\d+)\/ack$/);
   if (ack && req.method === 'POST') {
     const b = await readBody(req);
-    store.ackAlarm(Number(ack[1]), b.by);
-    pushSnapshot();
-    return json(res, 200, { ok: true });
+    try {
+      return json(res, 200, { ok: true, ...await executeCommand({
+        // A local dashboard click is an operator at the machine; a relayed
+        // ack defaults to 'mobile' inside executeCommand.
+        action: 'ack', payload: { alarmId: ack[1], by: b.by ?? 'operator' },
+      }) });
+    } catch (err) {
+      return json(res, 400, { error: err.message });
+    }
   }
 
   const close = p.match(/^\/api\/alarms\/(\d+)\/close$/);
   if (close && req.method === 'POST') {
     const b = await readBody(req);
-    const id = Number(close[1]);
-    store.closeAlarm(id, b.outcome, b.technician, b.notes);
-    for (const [k, v] of openKeys) if (v === id) openKeys.delete(k);
-    for (const cv of live.values()) recomputeRisk(cv);
-    pushSnapshot();
-    return json(res, 200, { ok: true });
+    try {
+      return json(res, 200, { ok: true, ...await executeCommand({
+        action: 'close',
+        payload: { alarmId: close[1], outcome: b.outcome, technician: b.technician, notes: b.notes },
+      }) });
+    } catch (err) {
+      return json(res, 400, { error: err.message });
+    }
   }
 
   if (p === '/api/contract') {
