@@ -6,3 +6,6 @@ data/beltguard.db-wal
 data/beltguard.db-shm
 data/evidence/*.jpg
 data/evidence/*.png
+
+# Git worktrees created for isolated task execution.
+.claude/worktrees/
