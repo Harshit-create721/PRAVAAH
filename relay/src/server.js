@@ -85,23 +85,10 @@ export function createRelayServer({ publishSecret = null, writeToken = null, sta
   }
 
   function attachSubscriber(ws, canWrite) {
+    hub.addSubscriber(ws);
     ws.on('message', (data) => hub.handleSubscriberMessage(ws, data.toString(), { canWrite }));
     ws.on('close', () => hub.removeSubscriber(ws));
     ws.on('error', () => hub.removeSubscriber(ws));
-    // Deferred past the current I/O poll turn: writing the replay (cached
-    // snapshot + gateway state) in the same synchronous turn that completes
-    // the WS handshake lets the OS coalesce them with the handshake response
-    // into a single read on the client. `ws` unshifts any such leftover bytes
-    // and redelivers them via a `process.nextTick`, which beats the
-    // `await once(ws, 'open')` continuation's microtask - so a client that
-    // only attaches its 'message' listener after 'open' resolves loses the
-    // first frame. `setImmediate`/`process.nextTick` stay within the same
-    // loop iteration and don't help; a real timer forces a trip through the
-    // timers phase, giving the client's socket a poll turn to read and
-    // process the handshake on its own before the replay is sent.
-    setTimeout(() => {
-      if (ws.readyState === ws.OPEN) hub.addSubscriber(ws);
-    }, 0);
   }
 
   return {
