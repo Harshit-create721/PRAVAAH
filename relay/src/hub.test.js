@@ -223,4 +223,30 @@ test('removing a subscriber drops its pending commands', () => {
     type: 'commandResult', id: 'c5', ok: true,
   })), 'a result for a departed client must not crash the relay');
   assert.equal(hub.subscriberCount, 0);
+  assert.equal(sub.messagesOfType('commandResult').length, 0,
+    'a departed subscriber must not receive a stale result');
+});
+
+test('one subscriber\'s send throwing does not abort fan-out to others', () => {
+  const { hub } = setup();
+  const pub = fakeSocket();
+  hub.attachPublisher(pub);
+
+  // Create a socket that throws on send
+  const throwing = fakeSocket();
+  const originalSend = throwing.send;
+  throwing.send = () => { throw new Error('socket closed'); };
+
+  // Create a normal socket
+  const normal = fakeSocket();
+
+  hub.addSubscriber(throwing);
+  hub.addSubscriber(normal);
+
+  // Send a snapshot - the throwing socket should not crash the hub
+  // and the normal socket should still receive it
+  hub.handlePublisherMessage(JSON.stringify({ type: 'snapshot', conveyors: [] }));
+
+  assert.equal(normal.messagesOfType('snapshot').length, 1,
+    'a healthy subscriber must receive the broadcast even if another throws');
 });
