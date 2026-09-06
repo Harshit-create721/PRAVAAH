@@ -1,0 +1,24 @@
+{
+  "thresholds": {
+    "watch": 34.9,
+    "warning": 60.6,
+    "critical": 91.7
+  },
+  "derivation": {
+    "watch": "baseline anomaly-score p90",
+    "warning": "baseline anomaly-score p98 (floored at watch + 2)",
+    "critical": "baseline anomaly-score p99.5 (floored at warning + 2)"
+  },
+  "realised_baseline_exceedance": {
+    "watch": 0.10222222222222223,
+    "warning": 0.022222222222222223,
+    "critical": 0.008888888888888889
+  },
+  "status_order": [
+    "NORMAL",
+    "WATCH",
+    "WARNING",
+    "CRITICAL"
+  ],
+  "disclaimer": "PROTOTYPE THRESHOLDS. Derived from one unlabelled recording of one conveyor. They are not industrial safety limits, not certified trip points, and carry no guarantee of detecting any particular fault. Edit models/thresholds.json to retune without retraining."
+}

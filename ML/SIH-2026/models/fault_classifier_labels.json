@@ -1,0 +1,110 @@
+{
+  "classes": [
+    "BELT_SLIP",
+    "COMBINED_FAULT",
+    "HIGH_VIBRATION",
+    "NORMAL",
+    "OVERHEATING",
+    "RPM_INSTABILITY"
+  ],
+  "feature_order": [
+    "vib_rms_mean",
+    "vib_rms_std",
+    "vib_rms_min",
+    "vib_rms_max",
+    "vib_rms_range",
+    "vib_rms_median",
+    "vib_rms_p25",
+    "vib_rms_p75",
+    "vib_rms_kurtosis",
+    "vib_rms_crest_factor",
+    "vib_kurt_sensor_mean",
+    "vib_kurt_sensor_std",
+    "vib_kurt_sensor_min",
+    "vib_crest_sensor_mean",
+    "vib_crest_sensor_std",
+    "vib_crest_sensor_min",
+    "vib_crest_sensor_max",
+    "vib_crest_sensor_range",
+    "acceleration_x_mean",
+    "acceleration_x_std",
+    "acceleration_x_min",
+    "acceleration_x_max",
+    "acceleration_x_range",
+    "acceleration_y_mean",
+    "acceleration_y_std",
+    "acceleration_y_min",
+    "acceleration_y_max",
+    "acceleration_y_range",
+    "acceleration_z_mean",
+    "acceleration_z_std",
+    "acceleration_z_min",
+    "acceleration_z_max",
+    "acceleration_z_range",
+    "acceleration_magnitude_mean",
+    "acceleration_magnitude_std",
+    "acceleration_magnitude_min",
+    "acceleration_magnitude_max",
+    "acceleration_magnitude_range",
+    "vib_rms_slope_per_s",
+    "temp_mean",
+    "temp_std",
+    "temp_range",
+    "temp_slope_per_s",
+    "temp_change",
+    "ambient_mean",
+    "ambient_std",
+    "ambient_slope_per_s",
+    "temp_over_ambient_mean",
+    "temp_over_ambient_min",
+    "temp_over_ambient_max",
+    "temp_over_ambient_slope_per_s",
+    "rpm_mean",
+    "rpm_min",
+    "rpm_max",
+    "rpm_std",
+    "rpm_range",
+    "rpm_slope_per_s",
+    "rpm_change",
+    "vib_cv"
+  ],
+  "best_model": "XGBoost",
+  "artifacts": {
+    "RandomForest": "fault_classifier_rf.joblib",
+    "XGBoost": "fault_classifier_xgb.joblib"
+  },
+  "trained_on": "SYNTHETIC labels from ml/synthetic_faults.py",
+  "warning": "Labels are simulated. Reported metrics measure recovery of hand-written injection recipes, not real fault detection. Do not quote them as field accuracy.",
+  "split": "segment-grouped 5-fold (siblings of one real window never straddle a split)",
+  "class_prior_caveat": "Generation grid produced ~50x more fault than normal windows; in service normal is >99% of traffic.",
+  "training_date_utc": "2026-09-06T20:29:14.786534+00:00",
+  "environment": {
+    "python": "3.14.5",
+    "xgboost": "3.4.1",
+    "scikit_learn": "1.9.0"
+  },
+  "cv_macro_f1": {
+    "RandomForest": {
+      "mean": 0.9657902256417217,
+      "std": 0.021528103342450797,
+      "folds": [
+        0.9558301425337302,
+        0.9779130094283378,
+        0.931727625480108,
+        0.9675615206148911,
+        0.9959188301515414
+      ]
+    },
+    "XGBoost": {
+      "mean": 0.9729297181245891,
+      "std": 0.0181479214904153,
+      "folds": [
+        0.9736090455878692,
+        0.9774822937456832,
+        0.9420828505408264,
+        0.9725851017082796,
+        0.9988892990402869
+      ]
+    }
+  }
+}

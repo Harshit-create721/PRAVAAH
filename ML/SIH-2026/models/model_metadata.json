@@ -1,0 +1,419 @@
+{
+  "model_name": "conveyor-condition-isolation-forest",
+  "task": "Unsupervised conveyor condition/anomaly detection using vibration, temperature and RPM sensor fusion.",
+  "not_a_classifier": "This model does not predict fault types, failure probability or remaining useful life. The dataset is unlabelled, so no such claim is supportable.",
+  "training_date_utc": "2026-09-06T20:26:54.653586+00:00",
+  "training_duration_s": 72.37,
+  "environment": {
+    "python": "3.14.5",
+    "platform": "Windows-11-10.0.26200-SP0",
+    "numpy": "2.5.2",
+    "pandas": "3.0.5",
+    "scikit_learn": "1.9.0"
+  },
+  "dataset": {
+    "path": "data/2026-09-06T17-29-57.647Z-a70e3e55-cleaned-v1/telemetry.csv",
+    "session_id": "2026-09-06T17-29-57.647Z-a70e3e55",
+    "dataset_version": 1,
+    "label_field": "unlabelled",
+    "conveyor": "CV-01",
+    "raw_rows": 6527,
+    "raw_rows_by_node": {
+      "esp32-vibration-01": 2192,
+      "esp32-thermal-01": 2173,
+      "esp32-marker-01": 2162
+    },
+    "segments_total": 78,
+    "segments_yielding_windows": 37,
+    "retained_seconds": 1061.891
+  },
+  "windows": {
+    "n_windows": 225,
+    "window_seconds": 10.0,
+    "step_seconds": 2.5,
+    "overlap_fraction": 0.75,
+    "independence_caveat": "Windows overlap by 75%. They are correlated and must not be treated as 225 independent observations; they come from only 37 distinct segments."
+  },
+  "features": {
+    "n_candidate": 75,
+    "n_used": 59,
+    "feature_names": [
+      "vib_rms_mean",
+      "vib_rms_std",
+      "vib_rms_min",
+      "vib_rms_max",
+      "vib_rms_range",
+      "vib_rms_median",
+      "vib_rms_p25",
+      "vib_rms_p75",
+      "vib_rms_kurtosis",
+      "vib_rms_crest_factor",
+      "vib_kurt_sensor_mean",
+      "vib_kurt_sensor_std",
+      "vib_kurt_sensor_min",
+      "vib_crest_sensor_mean",
+      "vib_crest_sensor_std",
+      "vib_crest_sensor_min",
+      "vib_crest_sensor_max",
+      "vib_crest_sensor_range",
+      "acceleration_x_mean",
+      "acceleration_x_std",
+      "acceleration_x_min",
+      "acceleration_x_max",
+      "acceleration_x_range",
+      "acceleration_y_mean",
+      "acceleration_y_std",
+      "acceleration_y_min",
+      "acceleration_y_max",
+      "acceleration_y_range",
+      "acceleration_z_mean",
+      "acceleration_z_std",
+      "acceleration_z_min",
+      "acceleration_z_max",
+      "acceleration_z_range",
+      "acceleration_magnitude_mean",
+      "acceleration_magnitude_std",
+      "acceleration_magnitude_min",
+      "acceleration_magnitude_max",
+      "acceleration_magnitude_range",
+      "vib_rms_slope_per_s",
+      "temp_mean",
+      "temp_std",
+      "temp_range",
+      "temp_slope_per_s",
+      "temp_change",
+      "ambient_mean",
+      "ambient_std",
+      "ambient_slope_per_s",
+      "temp_over_ambient_mean",
+      "temp_over_ambient_min",
+      "temp_over_ambient_max",
+      "temp_over_ambient_slope_per_s",
+      "rpm_mean",
+      "rpm_min",
+      "rpm_max",
+      "rpm_std",
+      "rpm_range",
+      "rpm_slope_per_s",
+      "rpm_change",
+      "vib_cv"
+    ],
+    "pruning": {
+      "dropped_zero_variance": [],
+      "dropped_redundant": {
+        "vib_rms_rms": {
+          "duplicate_of": "vib_rms_mean",
+          "abs_corr": 0.998659
+        },
+        "vib_kurt_sensor_max": {
+          "duplicate_of": "vib_kurt_sensor_std",
+          "abs_corr": 0.999186
+        },
+        "vib_kurt_sensor_range": {
+          "duplicate_of": "vib_kurt_sensor_std",
+          "abs_corr": 0.999284
+        },
+        "temp_min": {
+          "duplicate_of": "temp_mean",
+          "abs_corr": 0.998216
+        },
+        "temp_max": {
+          "duplicate_of": "temp_mean",
+          "abs_corr": 0.998146
+        },
+        "temp_over_ambient_std": {
+          "duplicate_of": "temp_std",
+          "abs_corr": 0.997045
+        },
+        "rpm_cv": {
+          "duplicate_of": "rpm_std",
+          "abs_corr": 0.999991
+        },
+        "rpm_stability": {
+          "duplicate_of": "rpm_std",
+          "abs_corr": 0.99999
+        },
+        "vib_per_rpm": {
+          "duplicate_of": "vib_rms_mean",
+          "abs_corr": 0.999315
+        },
+        "vib_std_per_rpm": {
+          "duplicate_of": "vib_rms_std",
+          "abs_corr": 0.999988
+        },
+        "vib_peak_per_rpm": {
+          "duplicate_of": "vib_rms_max",
+          "abs_corr": 0.999869
+        },
+        "temp_over_ambient_per_rpm": {
+          "duplicate_of": "temp_over_ambient_mean",
+          "abs_corr": 0.999978
+        },
+        "temp_rise_c_per_min": {
+          "duplicate_of": "temp_slope_per_s",
+          "abs_corr": 1.0
+        },
+        "temp_over_ambient_rise_c_per_min": {
+          "duplicate_of": "temp_over_ambient_slope_per_s",
+          "abs_corr": 1.0
+        },
+        "vib_instability_at_stable_rpm": {
+          "duplicate_of": "vib_cv",
+          "abs_corr": 0.999995
+        },
+        "vib_impulsiveness": {
+          "duplicate_of": "vib_kurt_sensor_std",
+          "abs_corr": 0.997394
+        }
+      }
+    }
+  },
+  "model": {
+    "algorithm": "sklearn.ensemble.IsolationForest",
+    "parameters": {
+      "n_estimators": 600,
+      "max_samples": 128,
+      "contamination": 0.02,
+      "random_state": 42,
+      "n_jobs": -1,
+      "bootstrap": false
+    },
+    "config_defaults": {
+      "n_estimators": 300,
+      "max_samples": "auto",
+      "contamination": "auto",
+      "random_state": 42,
+      "n_jobs": -1,
+      "bootstrap": false
+    },
+    "parameter_selection": "segment-grouped 5-fold stability sweep; see parameter_sweep_top below",
+    "parameter_sweep_top": [
+      {
+        "params": {
+          "n_estimators": 600,
+          "max_samples": 128,
+          "contamination": 0.02
+        },
+        "mean_abs_outlier_rate_gap": 0.0267,
+        "seed_rank_stability_spearman": 0.9549,
+        "folds": 5
+      },
+      {
+        "params": {
+          "n_estimators": 600,
+          "max_samples": "auto",
+          "contamination": 0.02
+        },
+        "mean_abs_outlier_rate_gap": 0.04,
+        "seed_rank_stability_spearman": 0.9515,
+        "folds": 5
+      },
+      {
+        "params": {
+          "n_estimators": 600,
+          "max_samples": "auto",
+          "contamination": "auto"
+        },
+        "mean_abs_outlier_rate_gap": 0.0589,
+        "seed_rank_stability_spearman": 0.9515,
+        "folds": 5
+      },
+      {
+        "params": {
+          "n_estimators": 600,
+          "max_samples": "auto",
+          "contamination": 0.05
+        },
+        "mean_abs_outlier_rate_gap": 0.0633,
+        "seed_rank_stability_spearman": 0.9515,
+        "folds": 5
+      },
+      {
+        "params": {
+          "n_estimators": 600,
+          "max_samples": 128,
+          "contamination": 0.05
+        },
+        "mean_abs_outlier_rate_gap": 0.0633,
+        "seed_rank_stability_spearman": 0.9549,
+        "folds": 5
+      }
+    ],
+    "contamination_note": "`contamination` only sets IsolationForest.offset_, a constant shift of decision_function. The anomaly score here is a robust z-score of -decision_function, so that constant cancels: contamination does not change any reported anomaly_score, health_score or status. It affects only the model's own predict() labels.",
+    "sweep_criterion": "No labels exist, so there is no accuracy to optimise. The sweep ranks settings by seed-to-seed Spearman rank stability of held-out scores, then by how closely the held-out outlier rate matches the in-fit rate under segment-grouped folds. It measures consistency, not skill."
+  },
+  "training_split": {
+    "deployed_model_fitted_on": "all 225 windows from all 37 segments",
+    "reason": "Temperature is a monotone warm-up confounded with session time, and the dataset manifest requires the whole session to stay in one split. Fitting on early windows only would flag late windows as anomalous for a thermal reason, not a mechanical one.",
+    "chronological_drift_diagnostic": "evaluate.py additionally fits on the earliest 70% of segments and scores the rest. That is a drift diagnostic, not a generalisation estimate.",
+    "segments_used": {
+      "S001": 6,
+      "S002": 7,
+      "S003": 16,
+      "S005": 25,
+      "S006": 6,
+      "S007": 6,
+      "S008": 6,
+      "S009": 6,
+      "S011": 8,
+      "S012": 4,
+      "S013": 2,
+      "S014": 6,
+      "S015": 8,
+      "S017": 16,
+      "S018": 3,
+      "S019": 6,
+      "S020": 2,
+      "S022": 5,
+      "S023": 1,
+      "S026": 9,
+      "S027": 1,
+      "S030": 10,
+      "S034": 1,
+      "S038": 2,
+      "S043": 2,
+      "S045": 13,
+      "S049": 2,
+      "S051": 3,
+      "S053": 4,
+      "S054": 1,
+      "S057": 1,
+      "S058": 13,
+      "S059": 1,
+      "S069": 1,
+      "S071": 15,
+      "S074": 5,
+      "S076": 2
+    }
+  },
+  "scoring": {
+    "raw_score": "-IsolationForest.decision_function (higher = more unusual)",
+    "calibration": {
+      "raw_median": -0.07704674705011338,
+      "raw_mad_scaled": 0.019800870881555244,
+      "z_mid": 4.830605321031947,
+      "z_scale": 1.6405859843627912,
+      "baseline_raw_p50": -0.07704674705011338,
+      "baseline_raw_p95": -0.014528280015041445,
+      "baseline_raw_p99": 0.018603445191393925,
+      "baseline_n": 225,
+      "note": "anomaly_score = 100 / (1 + exp(-(z - z_mid) / z_scale)) where z = (raw - raw_median) / raw_mad_scaled and raw = -decision_function. 50 corresponds to the baseline 99th percentile of unusualness. This is a relative unusualness scale, not a failure probability."
+    },
+    "thresholds": {
+      "thresholds": {
+        "watch": 34.9,
+        "warning": 60.6,
+        "critical": 91.7
+      },
+      "derivation": {
+        "watch": "baseline anomaly-score p90",
+        "warning": "baseline anomaly-score p98 (floored at watch + 2)",
+        "critical": "baseline anomaly-score p99.5 (floored at warning + 2)"
+      },
+      "realised_baseline_exceedance": {
+        "watch": 0.10222222222222223,
+        "warning": 0.022222222222222223,
+        "critical": 0.008888888888888889
+      },
+      "status_order": [
+        "NORMAL",
+        "WATCH",
+        "WARNING",
+        "CRITICAL"
+      ],
+      "disclaimer": "PROTOTYPE THRESHOLDS. Derived from one unlabelled recording of one conveyor. They are not industrial safety limits, not certified trip points, and carry no guarantee of detecting any particular fault. Edit models/thresholds.json to retune without retraining."
+    }
+  },
+  "baseline_screening": {
+    "n_windows": 225,
+    "n_max_robust_z_gt_6": 11,
+    "n_max_robust_z_gt_10": 4,
+    "probe_forest_outlier_fraction": 0.0489,
+    "extreme_windows": [
+      {
+        "row": 186,
+        "max_robust_z": 147.12,
+        "driving_feature": "vib_kurt_sensor_std",
+        "also_flagged_by_probe_forest": true
+      },
+      {
+        "row": 13,
+        "max_robust_z": 20.87,
+        "driving_feature": "vib_kurt_sensor_std",
+        "also_flagged_by_probe_forest": true
+      },
+      {
+        "row": 185,
+        "max_robust_z": 12.81,
+        "driving_feature": "acceleration_x_mean",
+        "also_flagged_by_probe_forest": true
+      },
+      {
+        "row": 184,
+        "max_robust_z": 11.26,
+        "driving_feature": "acceleration_x_mean",
+        "also_flagged_by_probe_forest": false
+      },
+      {
+        "row": 174,
+        "max_robust_z": 9.24,
+        "driving_feature": "vib_rms_kurtosis",
+        "also_flagged_by_probe_forest": false
+      },
+      {
+        "row": 29,
+        "max_robust_z": 8.58,
+        "driving_feature": "vib_rms_kurtosis",
+        "also_flagged_by_probe_forest": false
+      },
+      {
+        "row": 175,
+        "max_robust_z": 8.41,
+        "driving_feature": "vib_rms_kurtosis",
+        "also_flagged_by_probe_forest": false
+      },
+      {
+        "row": 219,
+        "max_robust_z": 8.16,
+        "driving_feature": "acceleration_x_mean",
+        "also_flagged_by_probe_forest": false
+      },
+      {
+        "row": 202,
+        "max_robust_z": 6.62,
+        "driving_feature": "acceleration_x_mean",
+        "also_flagged_by_probe_forest": false
+      },
+      {
+        "row": 206,
+        "max_robust_z": 6.25,
+        "driving_feature": "vib_rms_kurtosis",
+        "also_flagged_by_probe_forest": false
+      },
+      {
+        "row": 126,
+        "max_robust_z": 6.15,
+        "driving_feature": "acceleration_x_mean",
+        "also_flagged_by_probe_forest": false
+      }
+    ],
+    "max_robust_z_percentiles": {
+      "p50": 2.6,
+      "p90": 4.62,
+      "p99": 12.43,
+      "max": 147.12
+    }
+  },
+  "known_limitations": [
+    "The dataset carries no verified fault labels. Nothing here is validated against ground truth, and no accuracy, precision, recall, F1, failure probability or remaining-useful-life figure is produced.",
+    "'Baseline observed operating behaviour' is not 'confirmed healthy behaviour'. The conveyor's mechanical condition during the recording was never verified.",
+    "One conveyor (CV-01), one session, 1062 s of retained data. Nothing here estimates behaviour on a different machine, a different day or a different belt loading.",
+    "Temperature is confounded with elapsed session time (r = 0.96). A rising temperature reading may reflect normal warm-up rather than a fault.",
+    "hall_rpm varied only between 20.37 and 20.69 RPM and updates roughly every 3 s. The model has never seen a speed change, so RPM-instability detection is untested.",
+    "Device timestamps stall during the session (up to ~100%% duplicated (node, ts_ms) pairs late on). Slope features are accurate only to about the 2 s burst period.",
+    "No motor current, motor power, motor-side RPM, load cell, acoustic or belt-offset channel is present, so slip, load and drive-side faults cannot be observed at all.",
+    "Windows overlap by 75%, so the 225 samples are correlated, not independent.",
+    "41 of 78 segments are shorter than the 10 s window and contribute nothing.",
+    "Thresholds are prototype values from one recording, not industrial safety limits."
+  ]
+}

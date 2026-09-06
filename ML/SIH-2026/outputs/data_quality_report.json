@@ -1,0 +1,632 @@
+{
+  "file": "data/2026-09-06T17-29-57.647Z-a70e3e55-cleaned-v1/telemetry.csv",
+  "generated_from_manifest": {
+    "session_id": "2026-09-06T17-29-57.647Z-a70e3e55",
+    "dataset_version": 1,
+    "label": "unlabelled",
+    "source": "live",
+    "source_rows": 11480,
+    "kept_rows": 6527,
+    "removed_rows": 4953,
+    "retained_interval_seconds": 1092.053,
+    "grouping_rule": "Keep this entire source session/day in one ML split. Never window across segment_id boundaries.",
+    "qualification": "Unlabelled telemetry subset; range checks do not prove mechanical health or rule out in-range Hall artifacts."
+  },
+  "shape": {
+    "rows": 6527,
+    "columns": 34
+  },
+  "dtypes": {
+    "session_id": "str",
+    "label": "str",
+    "source": "str",
+    "conveyor": "str",
+    "received_at_ms": "int64",
+    "ts_ms": "int64",
+    "node": "str",
+    "seq": "int64",
+    "seq_gap": "int64",
+    "seq_reset": "int64",
+    "sensor_health": "str",
+    "quality_issues": "str",
+    "motor_current_rms": "float64",
+    "motor_power": "float64",
+    "motor_rpm": "float64",
+    "hall_rpm": "float64",
+    "belt_speed": "float64",
+    "slip_ratio": "float64",
+    "vibration_rms": "float64",
+    "vibration_kurtosis": "float64",
+    "vibration_crest": "float64",
+    "acceleration_x": "float64",
+    "acceleration_y": "float64",
+    "acceleration_z": "float64",
+    "acceleration_magnitude": "float64",
+    "temperature": "float64",
+    "ambient": "float64",
+    "temperature_delta": "float64",
+    "belt_offset_left": "float64",
+    "belt_offset_right": "float64",
+    "acoustic_rms": "float64",
+    "load_cell_kg": "float64",
+    "segment_id": "str",
+    "source_csv_row": "int64"
+  },
+  "constant_columns": {
+    "session_id": "2026-09-06T17-29-57.647Z-a70e3e55",
+    "label": "unlabelled",
+    "source": "live",
+    "conveyor": "CV-01"
+  },
+  "time": {
+    "column_used": "ts_ms",
+    "first_utc": "2026-09-06T17:30:00.284000+00:00",
+    "last_utc": "2026-09-06T18:10:33.766000+00:00",
+    "wall_clock_span_s": 2433.482,
+    "retained_interval_s": 1061.891,
+    "excluded_gap_s": 1371.591,
+    "transport_to_device_lag_ms": {
+      "median": 2.0,
+      "max": 33
+    }
+  },
+  "nodes": {
+    "counts": {
+      "esp32-vibration-01": 2192,
+      "esp32-thermal-01": 2173,
+      "esp32-marker-01": 2162
+    },
+    "node_to_sensor_role": {
+      "esp32-marker-01": "speed",
+      "esp32-thermal-01": "thermal",
+      "esp32-vibration-01": "vibration"
+    },
+    "sensor_signals_used": {
+      "speed": [
+        "hall_rpm"
+      ],
+      "thermal": [
+        "temperature",
+        "ambient"
+      ],
+      "vibration": [
+        "vibration_rms",
+        "vibration_kurtosis",
+        "vibration_crest",
+        "acceleration_x",
+        "acceleration_y",
+        "acceleration_z",
+        "acceleration_magnitude"
+      ]
+    },
+    "validation": {
+      "expected_nodes_present": [
+        "esp32-marker-01",
+        "esp32-thermal-01",
+        "esp32-vibration-01"
+      ],
+      "unexpected_nodes": [],
+      "missing_expected_nodes": [],
+      "required_sensors_present": [
+        "speed",
+        "thermal",
+        "vibration"
+      ],
+      "missing_required_sensors": [],
+      "optional_signals_with_data": []
+    }
+  },
+  "columns_dropped_all_null": [
+    "acoustic_rms",
+    "belt_offset_left",
+    "belt_offset_right",
+    "load_cell_kg",
+    "motor_current_rms",
+    "motor_power",
+    "motor_rpm",
+    "slip_ratio",
+    "temperature_delta"
+  ],
+  "redundant_columns_dropped": [
+    {
+      "kept": "hall_rpm",
+      "dropped": "belt_speed",
+      "relation": "belt_speed = 0.0199387 * hall_rpm + 0.00125953",
+      "max_relative_residual": 0.0002625704411796907
+    }
+  ],
+  "missing_values": {
+    "session_id": {
+      "non_null": 6527,
+      "null_fraction_overall": 0.0
+    },
+    "label": {
+      "non_null": 6527,
+      "null_fraction_overall": 0.0
+    },
+    "source": {
+      "non_null": 6527,
+      "null_fraction_overall": 0.0
+    },
+    "conveyor": {
+      "non_null": 6527,
+      "null_fraction_overall": 0.0
+    },
+    "received_at_ms": {
+      "non_null": 6527,
+      "null_fraction_overall": 0.0
+    },
+    "ts_ms": {
+      "non_null": 6527,
+      "null_fraction_overall": 0.0
+    },
+    "node": {
+      "non_null": 6527,
+      "null_fraction_overall": 0.0
+    },
+    "seq": {
+      "non_null": 6527,
+      "null_fraction_overall": 0.0
+    },
+    "seq_gap": {
+      "non_null": 6527,
+      "null_fraction_overall": 0.0
+    },
+    "seq_reset": {
+      "non_null": 6527,
+      "null_fraction_overall": 0.0
+    },
+    "sensor_health": {
+      "non_null": 6527,
+      "null_fraction_overall": 0.0
+    },
+    "quality_issues": {
+      "non_null": 6527,
+      "null_fraction_overall": 0.0
+    },
+    "motor_current_rms": {
+      "non_null": 0,
+      "null_fraction_overall": 1.0
+    },
+    "motor_power": {
+      "non_null": 0,
+      "null_fraction_overall": 1.0
+    },
+    "motor_rpm": {
+      "non_null": 0,
+      "null_fraction_overall": 1.0
+    },
+    "hall_rpm": {
+      "non_null": 2162,
+      "null_fraction_overall": 0.668761
+    },
+    "belt_speed": {
+      "non_null": 2162,
+      "null_fraction_overall": 0.668761
+    },
+    "slip_ratio": {
+      "non_null": 0,
+      "null_fraction_overall": 1.0
+    },
+    "vibration_rms": {
+      "non_null": 2192,
+      "null_fraction_overall": 0.664164
+    },
+    "vibration_kurtosis": {
+      "non_null": 2192,
+      "null_fraction_overall": 0.664164
+    },
+    "vibration_crest": {
+      "non_null": 2192,
+      "null_fraction_overall": 0.664164
+    },
+    "acceleration_x": {
+      "non_null": 2192,
+      "null_fraction_overall": 0.664164
+    },
+    "acceleration_y": {
+      "non_null": 2192,
+      "null_fraction_overall": 0.664164
+    },
+    "acceleration_z": {
+      "non_null": 2192,
+      "null_fraction_overall": 0.664164
+    },
+    "acceleration_magnitude": {
+      "non_null": 2192,
+      "null_fraction_overall": 0.664164
+    },
+    "temperature": {
+      "non_null": 2173,
+      "null_fraction_overall": 0.667075
+    },
+    "ambient": {
+      "non_null": 2173,
+      "null_fraction_overall": 0.667075
+    },
+    "temperature_delta": {
+      "non_null": 0,
+      "null_fraction_overall": 1.0
+    },
+    "belt_offset_left": {
+      "non_null": 0,
+      "null_fraction_overall": 1.0
+    },
+    "belt_offset_right": {
+      "non_null": 0,
+      "null_fraction_overall": 1.0
+    },
+    "acoustic_rms": {
+      "non_null": 0,
+      "null_fraction_overall": 1.0
+    },
+    "load_cell_kg": {
+      "non_null": 0,
+      "null_fraction_overall": 1.0
+    },
+    "segment_id": {
+      "non_null": 6527,
+      "null_fraction_overall": 0.0
+    },
+    "source_csv_row": {
+      "non_null": 6527,
+      "null_fraction_overall": 0.0
+    }
+  },
+  "duplicates": {
+    "duplicate_ts_ms_any_node": 3066,
+    "duplicate_node_ts_pairs": 2356,
+    "rows_in_a_duplicate_node_ts_group": 3839,
+    "duplicate_node_seq_pairs": 2125,
+    "fully_duplicate_rows": 0,
+    "dup_fraction_first_quarter": 0.265927,
+    "dup_fraction_last_quarter": 0.837951,
+    "first_segment_over_50pct_duplicate_ts": "S022"
+  },
+  "integrity_flags": {
+    "seq_gap_nonzero": 0,
+    "seq_reset_nonzero": 0,
+    "sensor_health_values": {
+      "{\"vibration\":\"healthy\"}": 2192,
+      "{\"mlx\":\"healthy\"}": 2173,
+      "{\"speed\":\"healthy\"}": 2162
+    },
+    "quality_issues_values": {
+      "[]": 6527
+    }
+  },
+  "segments": {
+    "count_csv": 78,
+    "count_sidecar": 78,
+    "total_duration_s": 1061.891,
+    "duration_s": {
+      "min": 0.0,
+      "p25": 3.22825,
+      "median": 8.071,
+      "mean": 13.613987,
+      "p75": 20.9815,
+      "max": 73.372
+    },
+    "count_ge_window": 37,
+    "count_lt_window": 41
+  },
+  "sampling": {
+    "speed": {
+      "n_frames": 2162,
+      "dt_median_s": 0.5,
+      "dt_mean_s": 0.491496,
+      "dt_p05_s": 0.0,
+      "dt_p95_s": 2.0,
+      "dt_max_s": 2.337,
+      "zero_dt_fraction": 0.269895,
+      "dt_median_nonzero_s": 0.5,
+      "nominal_rate_hz": 2.0,
+      "effective_distinct_ts_rate_hz": 0.656775
+    },
+    "thermal": {
+      "n_frames": 2173,
+      "dt_median_s": 0.5,
+      "dt_mean_s": 0.477685,
+      "dt_p05_s": 0.0,
+      "dt_p95_s": 2.001,
+      "dt_max_s": 2.282,
+      "zero_dt_fraction": 0.333969,
+      "dt_median_nonzero_s": 0.5,
+      "nominal_rate_hz": 2.0,
+      "effective_distinct_ts_rate_hz": 0.605398
+    },
+    "vibration": {
+      "n_frames": 2192,
+      "dt_median_s": 0.0,
+      "dt_mean_s": 0.476932,
+      "dt_p05_s": 0.0,
+      "dt_p95_s": 2.002,
+      "dt_max_s": 2.336,
+      "zero_dt_fraction": 0.516556,
+      "dt_median_nonzero_s": 0.926,
+      "nominal_rate_hz": 1.079914,
+      "effective_distinct_ts_rate_hz": 0.452027
+    }
+  },
+  "signal_stats": {
+    "hall_rpm": {
+      "sensor": "speed",
+      "count": 2162,
+      "mean": 20.520185,
+      "std": 0.053251,
+      "min": 20.37,
+      "p01": 20.4,
+      "p25": 20.48,
+      "median": 20.52,
+      "p75": 20.56,
+      "p99": 20.6378,
+      "max": 20.69,
+      "distinct": 29,
+      "cv": 0.002595
+    },
+    "temperature": {
+      "sensor": "thermal",
+      "count": 2173,
+      "mean": 35.002591,
+      "std": 1.576044,
+      "min": 30.93,
+      "p01": 31.1788,
+      "p25": 33.73,
+      "median": 35.61,
+      "p75": 36.31,
+      "p99": 37.41,
+      "max": 37.93,
+      "distinct": 231,
+      "cv": 0.045026
+    },
+    "ambient": {
+      "sensor": "thermal",
+      "count": 2173,
+      "mean": 29.557345,
+      "std": 0.737531,
+      "min": 27.91,
+      "p01": 27.93,
+      "p25": 29.01,
+      "median": 29.91,
+      "p75": 30.25,
+      "p99": 30.41,
+      "max": 30.43,
+      "distinct": 86,
+      "cv": 0.024953
+    },
+    "vibration_rms": {
+      "sensor": "vibration",
+      "count": 2192,
+      "mean": 0.067097,
+      "std": 0.005912,
+      "min": 0.0529,
+      "p01": 0.0555,
+      "p25": 0.063,
+      "median": 0.0666,
+      "p75": 0.0707,
+      "p99": 0.081709,
+      "max": 0.1311,
+      "distinct": 285,
+      "cv": 0.088118
+    },
+    "vibration_kurtosis": {
+      "sensor": "vibration",
+      "count": 2192,
+      "mean": 2.817279,
+      "std": 2.401451,
+      "min": 1.826,
+      "p01": 2.06482,
+      "p25": 2.42,
+      "median": 2.651,
+      "p75": 2.946,
+      "p99": 4.22417,
+      "max": 79.851,
+      "distinct": 1121,
+      "cv": 0.852401
+    },
+    "vibration_crest": {
+      "sensor": "vibration",
+      "count": 2192,
+      "mean": 2.186646,
+      "std": 0.319609,
+      "min": 1.615,
+      "p01": 1.708,
+      "p25": 1.98875,
+      "median": 2.147,
+      "p75": 2.32425,
+      "p99": 2.99072,
+      "max": 7.897,
+      "distinct": 886,
+      "cv": 0.146164
+    },
+    "acceleration_x": {
+      "sensor": "vibration",
+      "count": 2192,
+      "mean": 0.108697,
+      "std": 0.006004,
+      "min": 0.0917,
+      "p01": 0.0959,
+      "p25": 0.1044,
+      "median": 0.1085,
+      "p75": 0.1131,
+      "p99": 0.122209,
+      "max": 0.1257,
+      "distinct": 285,
+      "cv": 0.055237
+    },
+    "acceleration_y": {
+      "sensor": "vibration",
+      "count": 2192,
+      "mean": -1.051278,
+      "std": 0.002896,
+      "min": -1.0615,
+      "p01": -1.0583,
+      "p25": -1.0532,
+      "median": -1.0513,
+      "p75": -1.0494,
+      "p99": -1.0443,
+      "max": -1.041,
+      "distinct": 168,
+      "cv": 0.002755
+    },
+    "acceleration_z": {
+      "sensor": "vibration",
+      "count": 2192,
+      "mean": -0.159073,
+      "std": 0.003804,
+      "min": -0.1723,
+      "p01": -0.167109,
+      "p25": -0.1618,
+      "median": -0.1593,
+      "p75": -0.1565,
+      "p99": -0.1502,
+      "max": -0.147,
+      "distinct": 201,
+      "cv": 0.023913
+    },
+    "acceleration_magnitude": {
+      "sensor": "vibration",
+      "count": 2192,
+      "mean": 1.07058,
+      "std": 0.003298,
+      "min": 1.061,
+      "p01": 1.0629,
+      "p25": 1.0684,
+      "median": 1.0706,
+      "p75": 1.0729,
+      "p99": 1.0781,
+      "max": 1.0809,
+      "distinct": 180,
+      "cv": 0.00308
+    }
+  },
+  "quantisation": {
+    "hall_rpm": {
+      "median_hold_frames": 6.0,
+      "mean_hold_frames": 5.674541,
+      "max_hold_frames": 17,
+      "distinct_values": 29
+    },
+    "temperature": {
+      "median_hold_frames": 1.0,
+      "mean_hold_frames": 1.014946,
+      "max_hold_frames": 2,
+      "distinct_values": 231
+    },
+    "vibration_rms": {
+      "median_hold_frames": 1.0,
+      "mean_hold_frames": 1.005966,
+      "max_hold_frames": 2,
+      "distinct_values": 285
+    }
+  },
+  "drift": {
+    "temperature": {
+      "first_60s_mean": 31.419608,
+      "last_60s_mean": 36.730706,
+      "session_rise_c": 5.311098,
+      "pearson_r_with_session_time": 0.957521
+    },
+    "temperature_minus_ambient": {
+      "first_60s_mean": 3.433922,
+      "last_60s_mean": 6.420471,
+      "pearson_r_with_session_time": 0.900726
+    },
+    "hall_rpm": {
+      "first_half_mean": 20.510442,
+      "second_half_mean": 20.53,
+      "pearson_r_with_session_time": 0.224666
+    },
+    "vibration_rms": {
+      "first_half_mean": 0.067167,
+      "second_half_mean": 0.067027,
+      "pearson_r_with_session_time": 0.044528
+    }
+  },
+  "window_geometry": {
+    "selected_window_s": 10.0,
+    "selected_step_s": 2.5,
+    "min_frames_per_sensor": 8,
+    "min_time_coverage": 0.6,
+    "overlap_fraction": 0.75,
+    "trials": [
+      {
+        "window_s": 10,
+        "step_s": 5,
+        "windows": 118,
+        "segments_covered": 35,
+        "median_frames_per_sensor": 20.0,
+        "rejected_candidates": 3,
+        "selected": false
+      },
+      {
+        "window_s": 10,
+        "step_s": 2.5,
+        "windows": 225,
+        "segments_covered": 37,
+        "median_frames_per_sensor": 20.0,
+        "rejected_candidates": 3,
+        "selected": true
+      },
+      {
+        "window_s": 8,
+        "step_s": 2,
+        "windows": 305,
+        "segments_covered": 42,
+        "median_frames_per_sensor": 16.0,
+        "rejected_candidates": 22,
+        "selected": false
+      },
+      {
+        "window_s": 15,
+        "step_s": 5,
+        "windows": 84,
+        "segments_covered": 24,
+        "median_frames_per_sensor": 30.0,
+        "rejected_candidates": 0,
+        "selected": false
+      },
+      {
+        "window_s": 20,
+        "step_s": 5,
+        "windows": 60,
+        "segments_covered": 20,
+        "median_frames_per_sensor": 40.0,
+        "rejected_candidates": 0,
+        "selected": false
+      },
+      {
+        "window_s": 6,
+        "step_s": 2,
+        "windows": 342,
+        "segments_covered": 47,
+        "median_frames_per_sensor": 12.0,
+        "rejected_candidates": 36,
+        "selected": false
+      }
+    ]
+  },
+  "outlier_scan": {
+    "vibration_rms": {
+      "median": 0.0666,
+      "robust_sigma": 0.005782,
+      "frames_robust_z_gt_5": 2,
+      "frames_robust_z_gt_10": 1,
+      "max_robust_z": 11.155039
+    },
+    "vibration_kurtosis": {
+      "median": 2.651,
+      "robust_sigma": 0.37658,
+      "frames_robust_z_gt_5": 11,
+      "frames_robust_z_gt_10": 5,
+      "max_robust_z": 205.002703
+    },
+    "vibration_crest": {
+      "median": 2.147,
+      "robust_sigma": 0.244629,
+      "frames_robust_z_gt_5": 9,
+      "frames_robust_z_gt_10": 4,
+      "max_robust_z": 23.504981
+    }
+  }
+}
