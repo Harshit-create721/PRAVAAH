@@ -78,6 +78,31 @@ function topicParts(topic) {
   return { site: p[1], conveyor: p[2], kind: p[3], rest: p.slice(4) };
 }
 
+/**
+ * The current value of every channel that is still fresh, merged across nodes.
+ *
+ * With one ESP32 carrying every sensor, a telemetry frame WAS the machine
+ * state and rules could be evaluated straight off it. With one node per sensor
+ * each frame is a fragment: the thermal node's packet has no vibration in it.
+ * Evaluating per-frame would leave every cross-sensor rule permanently listed
+ * as "not connected", and would make the skipped list flap depending on which
+ * node published last.
+ *
+ * Stale channels are excluded rather than carried forward - a rule that fires
+ * on a reading from a node that went silent minutes ago is worse than a rule
+ * that admits it cannot see.
+ */
+function liveValues(cv) {
+  const now = Date.now();
+  const out = {};
+  for (const [k, c] of Object.entries(cv.channels)) {
+    if (!c || !Number.isFinite(c.v) || !Number.isFinite(c.ts)) continue;
+    if (now - c.ts > config.freshness.staleMs) continue;
+    out[k] = c.v;
+  }
+  return out;
+}
+
 function onTelemetry(cv, payload, raw) {
   const r = validate(payload, CHANNELS);
   for (const rej of r.rejected) {
@@ -96,22 +121,26 @@ function onTelemetry(cv, payload, raw) {
   }
   if (payload.sensor_health) cv.sensorHealth = normaliseHealth(payload.sensor_health);
 
-  const state = inferOperatingState(r.values, { state: cv.operating_state, speed: cv.prevSpeed });
-  cv.operating_state = state;
-  cv.prevSpeed = r.values.belt_speed ?? cv.prevSpeed;
+  // Everything below reasons about the machine, so it reads the merged state
+  // rather than this one packet.
+  const merged = liveValues(cv);
 
-  const ev = evaluateTelemetry(cv.config, r.values);
+  const state = inferOperatingState(merged, { state: cv.operating_state, speed: cv.prevSpeed });
+  cv.operating_state = state;
+  cv.prevSpeed = merged.belt_speed ?? cv.prevSpeed;
+
+  const ev = evaluateTelemetry(cv.config, merged);
   cv.derived = ev.derived;
   cv.telemetrySkipped = ev.skipped;
   // Kept so the schematic can show headroom, not just breaches.
   cv.telemetryMetrics = ev.metrics;
-  if (Number.isFinite(ev.derived.expected_belt_speed) && Number.isFinite(r.values.belt_speed)
+  if (Number.isFinite(ev.derived.expected_belt_speed) && Number.isFinite(merged.belt_speed)
       && ev.derived.expected_belt_speed > 0.05) {
-    const slip = ((ev.derived.expected_belt_speed - r.values.belt_speed) / ev.derived.expected_belt_speed) * 100;
+    const slip = ((ev.derived.expected_belt_speed - merged.belt_speed) / ev.derived.expected_belt_speed) * 100;
     cv.channels.slip_ratio = { v: slip, ts: r.ts, node: 'derived' };
   }
-  if (Number.isFinite(r.values.temperature) && Number.isFinite(r.values.ambient)) {
-    cv.channels.temperature_delta = { v: r.values.temperature - r.values.ambient, ts: r.ts, node: 'derived' };
+  if (Number.isFinite(merged.temperature) && Number.isFinite(merged.ambient)) {
+    cv.channels.temperature_delta = { v: merged.temperature - merged.ambient, ts: r.ts, node: 'derived' };
   }
 
   applyFindings(cv, null, ev.findings, 'telemetry');

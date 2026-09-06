@@ -1,4 +1,6 @@
 node_modules/
+data/recordings/
+data/synthetic-recordings/
 data/beltguard.db
 data/beltguard.db-wal
 data/beltguard.db-shm

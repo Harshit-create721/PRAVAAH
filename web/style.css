@@ -719,3 +719,12 @@ a:hover { color: #f0bb69; }
 ::-webkit-scrollbar-track { background: #0a0c0f; }
 ::-webkit-scrollbar-thumb { background: #262a31; border-radius: 4px; }
 ::-webkit-scrollbar-thumb:hover { background: #343a43; }
+
+/* Live sensor readings drawn onto the 3D model. Slightly larger than the part
+   labels and not letter-spaced: these are numbers to be read at a glance from
+   across a room, not captions. */
+.sch-readout {
+  font-family: var(--mono); font-size: 10px; letter-spacing: 0.02em;
+  font-weight: 600;
+}
+.sch-readout.nosig { fill: #4a4640; font-weight: 400; letter-spacing: 0.09em; }

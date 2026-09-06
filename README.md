@@ -3,6 +3,9 @@
 **प्रवाह** — *flow*. Real-time monitoring and decision support for conveyor
 belt joints and splices on ROM, overland and underground belts.
 
+For the three-sensor USB rig, see [recording real conveyor runs for ML](docs/conveyor-recording.md):
+mounting, calibration limitations, and the `npm run record -- --label unlabelled` session recorder.
+
 Built against SIH26008, Ministry of Steel — *AI-Enabled Conveyor Belt Joint
 Rupture and Damage Prediction*. The problem statement is a steel-plant one;
 the deployment target is a mine, where the same belt carries abrasive ROM

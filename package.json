@@ -4,14 +4,22 @@
   "private": true,
   "description": "PRAVAAH - real-time conveyor belt joint/splice integrity monitoring for Indian mining (SIH26008). Package name kept as beltguard-edge to match the MQTT topic prefix and the firmware.",
   "type": "module",
-  "engines": { "node": ">=22.5" },
+  "engines": {
+    "node": ">=22.5"
+  },
   "scripts": {
     "start": "node server/index.js",
-    "bench": "node tools/bench-publisher.js"
+    "bench": "node tools/bench-publisher.js",
+    "bridge": "node tools/serial-bridge.js",
+    "record": "node tools/record-session.js",
+    "test:record": "node --test tools/record-session.test.js",
+    "demo": "./start-pravaah.sh"
   },
   "dependencies": {
+    "@serialport/parser-readline": "^13.0.0",
     "aedes": "^0.51.3",
     "mqtt": "^5.10.1",
+    "serialport": "^13.0.0",
     "ws": "^8.18.0"
   }
 }

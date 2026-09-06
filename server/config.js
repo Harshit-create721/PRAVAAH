@@ -56,6 +56,13 @@ export default {
       pulsesPerRev: null,
       speedWheelCircumferenceMm: null,
 
+      // Rotation speed the roller runs at when healthy, rpm. The speed rule
+      // compares measured motor_rpm against this. Leave null and the rule is
+      // listed under "Not yet connected" instead of guessing what normal is:
+      // there is no safe default, because normal is whatever YOUR drive does.
+      // Run the belt, read motor_rpm off the dashboard, put that number here.
+      nominalRpm: null,
+
       // --- Joints / splices ---
       // Leave empty. Joints self-register the first time their marker is
       // detected, so this fills itself from real passes. Add entries only to
@@ -77,6 +84,22 @@ export default {
         currentResidualPct: 25,    // load-adjusted motor current vs baseline, %
         beltOffsetMm: 15,          // lateral tracking displacement, mm
         crackGrowthMmPerLap: 0.05, // vision crack length growth rate
+
+        // --- Vibration and speed ---
+        // Unlike the joint thresholds above, these two are ABSOLUTE, not
+        // deviations from a learned baseline, so they are only as good as the
+        // numbers you put here. The defaults are bench figures for an ADXL345
+        // on a desk: a loaded mining conveyor idles far higher and would alarm
+        // continuously. Measure your rig's healthy steady-state RMS first and
+        // set this above it, or the alarm is noise.
+        vibrationRmsG: 0.35,       // steady-state vibration RMS, g
+        vibrationCrest: 6.0,       // crest factor -> impulsive/bearing damage
+        // Crest factor is peak/RMS, so as RMS approaches the sensor's noise
+        // floor the ratio is decided by noise and will cross any threshold at
+        // random. Below this RMS the crest rule reports nothing rather than
+        // raising an alarm about a stationary machine.
+        vibrationCrestMinRmsG: 0.05,
+        speedTolerancePct: 20,     // deviation of motor_rpm from nominalRpm, %
       },
     },
   ],

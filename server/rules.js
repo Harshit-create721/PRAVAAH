@@ -286,6 +286,62 @@ export function evaluateTelemetry(conveyor, values) {
     });
   }
 
+  // Steady-state vibration amplitude at the head shaft bearing.
+  if (Number.isFinite(values.vibration_rms) && Number.isFinite(th.vibrationRmsG)) {
+    take(gauge({
+      rule: 'vibration_high', family: 'idler_anomaly', component: 'drive_bearing',
+      value: values.vibration_rms, limit: th.vibrationRmsG, unit: 'g',
+      message: `Vibration ${fmt(values.vibration_rms, 3)} g RMS (limit ${fmt(th.vibrationRmsG, 2)} g)`,
+      measured: { vibration_rms: values.vibration_rms, limit_g: th.vibrationRmsG },
+    }));
+  } else {
+    skipped.push({ rule: 'vibration_high', why: 'needs vibration_rms and vibrationRmsG in config' });
+  }
+
+  // Crest factor separates "running rough" from "being hit". A rising RMS with
+  // a flat crest is more load; a rising crest at the same RMS is impacts, which
+  // is the early signature of bearing and idler damage. Worth its own rule
+  // because the two call for different maintenance.
+  const crestFloor = Number.isFinite(th.vibrationCrestMinRmsG) ? th.vibrationCrestMinRmsG : 0;
+  const crestHasSignal = Number.isFinite(values.vibration_rms) && values.vibration_rms >= crestFloor;
+  if (Number.isFinite(values.vibration_crest) && Number.isFinite(th.vibrationCrest) && crestHasSignal) {
+    take(gauge({
+      rule: 'vibration_impulsive', family: 'idler_anomaly', component: 'drive_bearing',
+      value: values.vibration_crest, limit: th.vibrationCrest, unit: '',
+      message: `Crest factor ${fmt(values.vibration_crest, 2)} (limit ${fmt(th.vibrationCrest, 1)}) - impulsive, not steady, vibration`,
+      measured: { vibration_crest: values.vibration_crest, vibration_rms: values.vibration_rms ?? null, limit: th.vibrationCrest },
+    }));
+  } else if (Number.isFinite(values.vibration_crest) && Number.isFinite(th.vibrationCrest) && !crestHasSignal) {
+    skipped.push({
+      rule: 'vibration_impulsive',
+      why: `vibration ${fmt(values.vibration_rms ?? 0, 3)} g RMS is below the ${fmt(crestFloor, 2)} g floor `
+        + 'where crest factor is meaningful - machine is effectively still',
+    });
+  } else {
+    skipped.push({ rule: 'vibration_impulsive', why: 'needs vibration_crest and vibrationCrest in config' });
+  }
+
+  // Rotation speed against the nominal the operator recorded for this drive.
+  // Two-sided on purpose: a belt running slow is slip or an overload, a belt
+  // running fast is an empty belt or a lost load, and both are worth knowing.
+  if (Number.isFinite(values.motor_rpm) && Number.isFinite(conveyor.nominalRpm) && conveyor.nominalRpm > 0) {
+    const devPct = ((values.motor_rpm - conveyor.nominalRpm) / conveyor.nominalRpm) * 100;
+    take(gauge({
+      rule: 'speed_deviation', family: 'slip_tension', component: 'drive_pulley',
+      value: devPct, limit: th.speedTolerancePct, unit: '%',
+      message: `Speed ${fmt(Math.abs(devPct), 1)}% ${devPct < 0 ? 'below' : 'above'} nominal `
+        + `(${fmt(values.motor_rpm, 0)} rpm vs ${fmt(conveyor.nominalRpm, 0)} rpm)`,
+      measured: { motor_rpm: values.motor_rpm, nominal_rpm: conveyor.nominalRpm, deviation_pct: devPct },
+    }));
+  } else {
+    skipped.push({
+      rule: 'speed_deviation',
+      why: Number.isFinite(conveyor.nominalRpm) && conveyor.nominalRpm > 0
+        ? 'needs motor_rpm from the Hall sensor'
+        : 'needs nominalRpm in config - run the belt, read motor_rpm, record it there',
+    });
+  }
+
   return { findings, metrics, risk, skipped, derived: { expected_belt_speed: expected } };
 }
 

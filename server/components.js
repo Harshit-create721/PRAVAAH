@@ -47,7 +47,7 @@ export const COMPONENTS = [
     group: 'drive',
     watch: ['vibration_rms', 'vibration_kurtosis', 'vibration_crest'],
     families: [],
-    coverage: 'Vibration amplitude only. No threshold is configured for steady-state vibration, so this reports signal presence, not condition.',
+    coverage: 'Vibration RMS against a configured limit, plus crest factor to separate impacts from steady roughness. Amplitude only - no spectrum, so a specific bearing defect frequency cannot be named.',
     sensorHint: 'Set a steady-state vibration limit in config, and add a plummer-block IR spot, to turn presence into condition.',
   },
   {

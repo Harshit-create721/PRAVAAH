@@ -557,6 +557,23 @@ function drawScene(fast = false) {
 }
 
 /**
+ * Format a sensor marker's live readout for the 3D view.
+ * Returns null when NOTHING in the list has ever been published, which is what
+ * makes the marker read NO SIGNAL rather than invent a placeholder.
+ */
+function readoutFor(cv, keys) {
+  const lines = [];
+  for (const key of keys ?? []) {
+    const c = cv.channels?.[key];
+    if (!c || c.value === null || c.value === undefined) continue;
+    const v = num(c.value, decimals(c.unit));
+    if (v === null) continue;
+    lines.push(`${v}${c.unit ? ' ' + c.unit : ''}`);
+  }
+  return lines.length ? lines : null;
+}
+
+/**
  * Labels and sensor markers are drawn in screen space after the 3D pass, so
  * text always faces the reader however the model is turned.
  */
@@ -583,17 +600,29 @@ function buildLabels(cv, jointBands, q) {
   // A marker is green only when its channel is arriving now - this is the row
   // an operator checks first when a part goes grey.
   const sensors = [
-    { p: [x1, cy + 52, MOTOR_Z], label: 'CT / RPM', chans: ['motor_current_rms', 'motor_rpm'] },
-    { p: [x1, cy + 58, M.face / 2 + 16], label: 'VIB-DRIVE', chans: ['vibration_rms'] },
-    { p: [40, cy + r + 74, 0], label: 'CAM', chans: ['belt_offset_left', 'belt_offset_right'] },
-    { p: [x0 + 118, cy - r - 40, -(M.rail + 8)], label: 'SPEED', chans: ['belt_speed'] },
-    { p: [IR_X, cy - r - 34, hw + 26], label: 'IR TEMP', chans: ['temperature'] },
+    // Current only. motor_rpm now comes from the Hall sensor on the roller, and
+    // showing it here too would imply a CT is fitted when none is.
+    { p: [x1, cy + 52, MOTOR_Z], label: 'CT', chans: ['motor_current_rms'],
+      show: ['motor_current_rms'] },
+    { p: [x1, cy + 58, M.face / 2 + 16], label: 'VIB-DRIVE', chans: ['vibration_rms'],
+      show: ['vibration_rms', 'vibration_crest'] },
+    { p: [40, cy + r + 74, 0], label: 'CAM', chans: ['belt_offset_left', 'belt_offset_right'],
+      show: ['belt_offset_left', 'belt_offset_right'] },
+    { p: [x0 + 118, cy - r - 40, -(M.rail + 8)], label: 'HALL SPEED', chans: ['motor_rpm', 'belt_speed'],
+      show: ['motor_rpm', 'belt_speed'] },
+    { p: [IR_X, cy - r - 34, hw + 26], label: 'IR TEMP', chans: ['temperature'],
+      show: ['temperature', 'temperature_delta'] },
     {
       p: [x0 + 26, cy + r + 56, -(hw + 14)], label: 'MARKER L/R',
       // No telemetry channel of its own: the marker sensors announce
       // themselves by producing joint passes, so that is what is reported.
       live: (cv.joints ?? []).some((j) => Number.isFinite(j.last_ts)),
       seen: (cv.joints ?? []).length > 0,
+      // Laps are the marker's measurement, so that is its readout.
+      readout: () => {
+        const laps = (cv.joints ?? []).map((j) => j.lap).filter(Number.isFinite);
+        return laps.length ? [`LAP ${Math.max(...laps)}`] : null;
+      },
     },
   ];
   for (const s of sensors) {
@@ -609,6 +638,21 @@ function buildLabels(cv, jointBands, q) {
     out.push(`<circle cx="${p[0].toFixed(1)}" cy="${p[1].toFixed(1)}" r="4" fill="${col}" opacity="${on ? 0.95 : 0.5}" pointer-events="none"/>`);
     out.push(`<text class="sch-label" x="${p[0].toFixed(1)}" y="${(p[1] - 9).toFixed(1)}" text-anchor="middle"
       fill="${on ? '#9a9182' : '#5c564d'}" pointer-events="none">${s.label}</text>`);
+
+    // The reading itself, stacked under the marker. Same rule as everywhere
+    // else in this dashboard: a channel nobody has published reads NO SIGNAL,
+    // never a zero and never a dash that could pass for one.
+    const lines = s.readout ? s.readout() : readoutFor(cv, s.show);
+    if (lines) {
+      lines.forEach((line, i) => {
+        out.push(`<text class="sch-readout" x="${p[0].toFixed(1)}" y="${(p[1] + 15 + i * 10).toFixed(1)}"
+          text-anchor="middle" fill="${on ? '#cdbf9a' : '#6b6459'}" pointer-events="none">${esc(line)}</text>`);
+      });
+    }
+    // No NO SIGNAL text here on purpose. The marker dot is already grey for a
+    // channel that has never published, and the Live Channels panel spells it
+    // out; repeating it in the 3D view only lands the words on top of the
+    // neighbouring part labels, which costs legibility for no new information.
   }
 
   for (const b of jointBands) {
