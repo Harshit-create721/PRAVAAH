@@ -1,353 +1,228 @@
-/* ============================================================================
-   PRAVAAH - ESP32 sensor node, USB SERIAL transport
-   ----------------------------------------------------------------------------
-   Same wire contract as beltguard_node.ino, but over USB instead of WiFi.
-   Written for demonstrating at a venue whose WiFi is unknown: nothing here
-   needs an SSID, an IP, or a router that lets peers talk to each other.
-
-   Each line printed to Serial that begins with '{' is one contract frame.
-   `tools/serial-bridge.js` reads those lines, stamps `ts`, and republishes
-   them to the same MQTT topics the dashboard already listens on. The server
-   and the dashboard are unchanged and cannot tell the difference.
-
-   ONE FIRMWARE, THREE BOARDS. The node scans I2C at boot and adopts a role
-   from what answers, so the same binary goes on all three and no board needs
-   its own build or a label that can be put on the wrong one:
-
-       0x5A         -> MLX90614  -> thermal node
-       0x53 / 0x1D  -> ADXL345   -> vibration node
-       neither      -> A3144 on GPIO27 -> marker node
-
-   THE ONE RULE, inherited from the project: if a value was not measured, its
-   field is OMITTED. Never 0, never -1, never null. The dashboard renders an
-   absent field as NO SIGNAL and cannot tell a placeholder from a reading.
-
-   Libraries: ArduinoJson v7, Adafruit MLX90614.
-   ==========================================================================*/
-
+/* PRAVAAH USB sensor nodes: MLX90614, ADXL345, Hall on GPIO27.
+   One sketch detects the attached I2C sensor. Missing/invalid measurements are
+   omitted. Firmware diagnostics travel with each frame for recording/debugging.
+   See docs/sensor-debugging.md for the measured rig configuration. */
 #include <Wire.h>
 #include <ArduinoJson.h>
-#include <Adafruit_MLX90614.h>
+#include <soc/gpio_reg.h>
+#include <soc/soc.h>
+#include "sensor_math.h"
 
-// ------------------------------------------------------------------ PINOUT
-#define PIN_I2C_SDA   21
-#define PIN_I2C_SCL   22
-#define PIN_MARKER    27      // A3144 OUT
-
-// --------------------------------------------------------------- CADENCE
-static const uint32_t TELEMETRY_MS   = 500;   // 2 Hz, matches the contract
-static const uint32_t VIB_SAMPLE_MS  = 5;     // 200 Hz accelerometer sampling
+#define PIN_I2C_SDA 21
+#define PIN_I2C_SCL 22
+#define PIN_MARKER 27
+static const char *FIRMWARE = "pravaah-serial-node 0.2.2";
+static const uint32_t TELEMETRY_MS = 500;
 static const uint16_t VIB_MAX_SAMPLES = 128;
-static const uint32_t MARKER_DEBOUNCE_US = 5000;
+// Filled only from the physical magnet arrangement, not from pulse frequency.
+static const float MAGNETS_PER_CYCLE = 1.0f;
+static const float BELT_LENGTH_M = 1.2f; // user supplied 120 cm; used only for a belt-mounted magnet
+static const bool HALL_ON_BELT = true; // confirmed: one taped magnet returns once per full loop
 
-// --------------------------------------------------------- SPEED CALIBRATION
-// The Hall sensor is the conveyor's speed sensor. RPM needs only the magnet
-// count, so it is always published:
-//     RPM = (pulses / MAGNETS_PER_REV) * 60 / window_seconds
-// belt_speed additionally needs the circumference of the wheel the magnets ride
-// on. Leave ROLLER_CIRC_MM at 0 and belt_speed is OMITTED rather than derived
-// from a guessed diameter - a fabricated speed would feed the slip rule and
-// produce fabricated alarms.
-static const float MAGNETS_PER_REV = 1.0f;   // magnets glued to the roller/shaft
-static const float ROLLER_CIRC_MM  = 0.0f;   // measured circumference, mm. 0 = unknown
-
-// I2C addresses used for role detection.
-static const uint8_t ADDR_MLX       = 0x5A;
-static const uint8_t ADDR_ADXL_LOW  = 0x53;
-static const uint8_t ADDR_ADXL_HIGH = 0x1D;
-
-// ADXL345 registers
-static const uint8_t ADXL_DEVID       = 0x00;
-static const uint8_t ADXL_BW_RATE     = 0x2C;
-static const uint8_t ADXL_POWER_CTL   = 0x2D;
-static const uint8_t ADXL_DATA_FORMAT = 0x31;
-static const uint8_t ADXL_DATAX0      = 0x32;
-static const float   ADXL_LSB_PER_G   = 256.0f;
-
+static const uint8_t ADDR_MLX = 0x5A;
+static const uint8_t ADXL_DEVID = 0x00, ADXL_BW_RATE = 0x2C;
+static const uint8_t ADXL_POWER_CTL = 0x2D, ADXL_DATA_FORMAT = 0x31;
+static const uint8_t ADXL_DATAX0 = 0x32, ADXL_FIFO_CTL = 0x38, ADXL_FIFO_STATUS = 0x39;
+static const float ADXL_LSB_PER_G = 256.0f;
 enum Role { ROLE_UNKNOWN, ROLE_THERMAL, ROLE_VIBRATION, ROLE_MARKER };
-
-static Role     g_role   = ROLE_UNKNOWN;
+static Role g_role = ROLE_UNKNOWN;
 static const char *g_nodeId = "esp32-unknown";
-static uint8_t  g_adxlAddr = ADDR_ADXL_LOW;
-static uint32_t g_seq = 0;
-
-Adafruit_MLX90614 mlx = Adafruit_MLX90614();
-static bool g_mlxOk = false;
-
-// ---------------------------------------------------------- marker ISR state
-// Written in interrupt context, read with interrupts masked.
-static volatile uint32_t g_markerCount = 0;
-static volatile uint32_t g_markerDtUs  = 0;
-static volatile bool     g_markerFresh = false;
-static volatile uint32_t g_lastEdgeUs  = 0;
-
-// One FALLING edge occurs exactly once per magnet passage whether the module
-// is active-low (bare A3144) or active-high (breakout with a comparator), so
-// counting this edge is polarity-independent.
-static void IRAM_ATTR markerIsr() {
-  uint32_t now = micros();
-  uint32_t dt  = now - g_lastEdgeUs;
-  if (dt < MARKER_DEBOUNCE_US) return;      // contact bounce / electrical noise
-  if (g_lastEdgeUs != 0) { g_markerDtUs = dt; g_markerFresh = true; }
-  g_lastEdgeUs = now;
-  g_markerCount++;
-}
-
-// ============================================================ I2C helpers ==
-
-static bool i2cProbe(uint8_t addr) {
-  Wire.beginTransmission(addr);
-  return Wire.endTransmission() == 0;
-}
-
-static bool adxlWrite(uint8_t reg, uint8_t val) {
-  Wire.beginTransmission(g_adxlAddr);
-  Wire.write(reg); Wire.write(val);
-  return Wire.endTransmission() == 0;
-}
-
-static bool adxlRead(uint8_t reg, uint8_t *buf, uint8_t n) {
-  Wire.beginTransmission(g_adxlAddr);
-  Wire.write(reg);
-  if (Wire.endTransmission(false) != 0) return false;   // repeated START
-  if (Wire.requestFrom((int)g_adxlAddr, (int)n) != n) return false;
-  for (uint8_t i = 0; i < n; i++) buf[i] = Wire.read();
-  return true;
-}
-
-static bool adxlMagnitude(float *mag) {
-  uint8_t b[6];
-  if (!adxlRead(ADXL_DATAX0, b, 6)) return false;
-  float x = (int16_t)((b[1] << 8) | b[0]) / ADXL_LSB_PER_G;
-  float y = (int16_t)((b[3] << 8) | b[2]) / ADXL_LSB_PER_G;
-  float z = (int16_t)((b[5] << 8) | b[4]) / ADXL_LSB_PER_G;
-  *mag = sqrtf(x * x + y * y + z * z);
-  return true;
-}
-
-// ====================================================== vibration window ===
-// Buffers one telemetry window of |a| samples. Gravity is a large DC term, so
-// every statistic below is computed on the deviation from the window mean --
-// that is the vibration, and the 1 g offset is not.
-
-static float    g_vibBuf[VIB_MAX_SAMPLES];
+static uint8_t g_adxlAddr = 0x53;
+static bool g_adxlOk = false;
+static uint32_t g_seq = 0, g_readErrors = 0, g_invalidSamples = 0, g_fifoOverruns = 0;
 static uint16_t g_vibN = 0;
+static bool g_windowFault = false, g_clipped = false;
+static pravaah::Acceleration g_samples[VIB_MAX_SAMPLES];
+static pravaah::HallPeriod g_hall;
+static pravaah::HallPulseFilter g_hallFilter;
+static volatile uint32_t g_rawEdges = 0, g_edgeOverflows = 0;
+static volatile uint32_t g_edgeTimes[128];
+static volatile uint8_t g_edgeLevels[128], g_edgeWrite = 0, g_edgeRead = 0;
 
-static void vibReset() { g_vibN = 0; }
-
-static void vibPush(float mag) {
-  if (g_vibN < VIB_MAX_SAMPLES) g_vibBuf[g_vibN++] = mag;
+static void IRAM_ATTR markerIsr() {
+  const uint8_t level = (REG_READ(GPIO_IN_REG) >> PIN_MARKER) & 1;
+  const uint32_t now = micros();
+  ++g_rawEdges;
+  const uint8_t next = (g_edgeWrite + 1) & 127;
+  if (next == g_edgeRead) { ++g_edgeOverflows; return; }
+  g_edgeTimes[g_edgeWrite] = now;
+  g_edgeLevels[g_edgeWrite] = level;
+  g_edgeWrite = next;
 }
 
-// Returns false when the window holds too few samples to say anything.
-static bool vibStats(float *rms, float *kurtosis, float *crest) {
-  if (g_vibN < 8) return false;
+static bool i2cProbe(uint8_t address) {
+  Wire.beginTransmission(address);
+  return Wire.endTransmission() == 0;
+}
 
-  double sum = 0;
-  for (uint16_t i = 0; i < g_vibN; i++) sum += g_vibBuf[i];
-  double mean = sum / g_vibN;
-
-  double m2 = 0, m4 = 0, peak = 0;
-  for (uint16_t i = 0; i < g_vibN; i++) {
-    double d = g_vibBuf[i] - mean;
-    double d2 = d * d;
-    m2 += d2;
-    m4 += d2 * d2;
-    if (fabs(d) > peak) peak = fabs(d);
+static bool readRegisters(uint8_t address, uint8_t reg, uint8_t *out, uint8_t n) {
+  Wire.beginTransmission(address); Wire.write(reg);
+  if (Wire.endTransmission(false) != 0 || Wire.requestFrom((int)address, (int)n) != n) {
+    ++g_readErrors; return false;
   }
-  double var = m2 / g_vibN;
-  *rms = sqrt(var);
-
-  // Below the sensor's own noise floor these two are meaningless: kurtosis
-  // divides by variance squared and crest by the RMS. Report neither rather
-  // than an artefact of dividing by nearly zero.
-  if (var < 1e-8) return false;
-
-  *kurtosis = (float)((m4 / g_vibN) / (var * var));
-  *crest    = (float)(peak / sqrt(var));
+  for (uint8_t i = 0; i < n; ++i) out[i] = Wire.read();
   return true;
 }
 
-// ========================================================= role detection ==
+static bool adxlWrite(uint8_t reg, uint8_t value) {
+  Wire.beginTransmission(g_adxlAddr); Wire.write(reg); Wire.write(value);
+  return Wire.endTransmission() == 0;
+}
+
+static bool initAdxl() {
+  uint8_t id = 0, format = 0, rate = 0, power = 0, fifo = 0;
+  bool ok = readRegisters(g_adxlAddr, ADXL_DEVID, &id, 1) && id == 0xE5;
+  ok = ok && adxlWrite(ADXL_POWER_CTL, 0) && adxlWrite(ADXL_DATA_FORMAT, 0x0A)
+    && adxlWrite(ADXL_BW_RATE, 0x0B) // 200 Hz ODR, 100 Hz bandwidth (0x0C is 400 Hz)
+    && adxlWrite(ADXL_FIFO_CTL, 0) && adxlWrite(ADXL_FIFO_CTL, 0x80)
+    && adxlWrite(ADXL_POWER_CTL, 0x08);
+  ok = ok && readRegisters(g_adxlAddr, ADXL_DATA_FORMAT, &format, 1)
+    && readRegisters(g_adxlAddr, ADXL_BW_RATE, &rate, 1)
+    && readRegisters(g_adxlAddr, ADXL_POWER_CTL, &power, 1)
+    && readRegisters(g_adxlAddr, ADXL_FIFO_CTL, &fifo, 1)
+    && format == 0x0A && rate == 0x0B && power == 0x08 && fifo == 0x80;
+  Serial.printf("ADXL id=0x%02X format=0x%02X rate=0x%02X power=0x%02X fifo=0x%02X verified=%d\n",
+    id, format, rate, power, fifo, ok);
+  return ok;
+}
+
+static bool readTemperature(uint8_t reg, float &value) {
+  uint8_t reply[3];
+  for (int attempt = 0; attempt < 3; ++attempt) {
+    if (!readRegisters(ADDR_MLX, reg, reply, 3)) continue;
+    if (pravaah::mlxTemperature(ADDR_MLX, reg, reply, value)) return true;
+    ++g_readErrors;
+  }
+  return false;
+}
+
+static void collectAcceleration() {
+  if (!g_adxlOk) return;
+  uint8_t status;
+  if (!readRegisters(g_adxlAddr, ADXL_FIFO_STATUS, &status, 1)) { g_windowFault = true; return; }
+  const uint8_t available = status & 0x3F;
+  if (available >= 32) { ++g_fifoOverruns; g_windowFault = true; }
+  if (available > 32) { ++g_invalidSamples; g_windowFault = true; return; }
+  for (uint8_t i = 0; i < available; ++i) {
+    uint8_t b[6];
+    if (!readRegisters(g_adxlAddr, ADXL_DATAX0, b, 6)) { g_windowFault = true; return; }
+    const int16_t raw[3] = {(int16_t)((b[1] << 8) | b[0]), (int16_t)((b[3] << 8) | b[2]), (int16_t)((b[5] << 8) | b[4])};
+    bool valid = true;
+    for (int axis = 0; axis < 3; ++axis) {
+      valid = valid && pravaah::validAdxlRaw(raw[axis]);
+      if (pravaah::clippedAdxlRaw(raw[axis])) g_clipped = true;
+    }
+    if (!valid) { ++g_invalidSamples; g_windowFault = true; continue; }
+    if (g_vibN >= VIB_MAX_SAMPLES) { g_windowFault = true; continue; }
+    g_samples[g_vibN++] = {raw[0] / ADXL_LSB_PER_G, raw[1] / ADXL_LSB_PER_G, raw[2] / ADXL_LSB_PER_G};
+  }
+}
 
 static void detectRole() {
-  Serial.println(F("scanning I2C to determine node role..."));
-
-  bool mlxPresent  = i2cProbe(ADDR_MLX);
-  bool adxlLow     = i2cProbe(ADDR_ADXL_LOW);
-  bool adxlHigh    = i2cProbe(ADDR_ADXL_HIGH);
-
-  Serial.printf("  0x5A MLX90614 : %s\n", mlxPresent ? "yes" : "no");
-  Serial.printf("  0x53 ADXL345  : %s\n", adxlLow  ? "yes" : "no");
-  Serial.printf("  0x1D ADXL345  : %s\n", adxlHigh ? "yes" : "no");
-
-  if (mlxPresent) {
-    g_role = ROLE_THERMAL;
-    g_nodeId = "esp32-thermal-01";
-    g_mlxOk = mlx.begin(ADDR_MLX, &Wire);
-  } else if (adxlLow || adxlHigh) {
-    g_role = ROLE_VIBRATION;
-    g_nodeId = "esp32-vibration-01";
-    g_adxlAddr = adxlLow ? ADDR_ADXL_LOW : ADDR_ADXL_HIGH;
-
-    uint8_t devid = 0;
-    adxlRead(ADXL_DEVID, &devid, 1);
-    Serial.printf("  ADXL345 DEVID = 0x%02X (expect 0xE5)\n", devid);
-
-    // FULL_RES at +/-8g: a hand-shake exceeds 2 g and would clip, flattening
-    // the peaks the statistics are made of. FULL_RES keeps 4 mg/LSB anyway.
-    adxlWrite(ADXL_DATA_FORMAT, 0x0A);
-    adxlWrite(ADXL_BW_RATE, 0x0C);       // 200 Hz, matches VIB_SAMPLE_MS
-    adxlWrite(ADXL_POWER_CTL, 0x08);     // leave standby
-  } else {
-    g_role = ROLE_MARKER;
-    g_nodeId = "esp32-marker-01";
-    pinMode(PIN_MARKER, INPUT_PULLUP);
-    attachInterrupt(digitalPinToInterrupt(PIN_MARKER), markerIsr, FALLING);
+  // Retry the boot probe so a slow power-up does not silently become a Hall node.
+  for (int attempt = 0; attempt < 5 && g_role == ROLE_UNKNOWN; ++attempt) {
+    if (i2cProbe(ADDR_MLX)) { g_role = ROLE_THERMAL; g_nodeId = "esp32-thermal-01"; }
+    else if (i2cProbe(0x53) || i2cProbe(0x1D)) {
+      g_adxlAddr = i2cProbe(0x53) ? 0x53 : 0x1D;
+      g_role = ROLE_VIBRATION; g_nodeId = "esp32-vibration-01"; g_adxlOk = initAdxl();
+    } else delay(100);
   }
-
-  const char *name = g_role == ROLE_THERMAL   ? "THERMAL (MLX90614)"
-                   : g_role == ROLE_VIBRATION ? "VIBRATION (ADXL345)"
-                                              : "MARKER (A3144 on GPIO27)";
-  Serial.printf("role: %s   node id: %s\n", name, g_nodeId);
-  Serial.println(F("emitting contract frames; lines starting with '{' are data"));
+  if (g_role == ROLE_UNKNOWN) {
+    g_role = ROLE_MARKER; g_nodeId = "esp32-marker-01";
+    pinMode(PIN_MARKER, INPUT_PULLUP);
+    g_hallFilter.high = digitalRead(PIN_MARKER) == HIGH;
+    g_hallFilter.changedUs = micros();
+    attachInterrupt(digitalPinToInterrupt(PIN_MARKER), markerIsr, CHANGE);
+  }
+  Serial.printf("role node=%s firmware=%s\n", g_nodeId, FIRMWARE);
 }
 
-// ============================================================= publishers ==
-// `ts` is deliberately absent: the ESP32 has no RTC, so the bridge stamps each
-// frame with the laptop's clock on arrival. That is accurate to the USB hop.
-
 static void emit(JsonDocument &doc) {
-  serializeJson(doc, Serial);
-  Serial.println();
+  serializeJson(doc, Serial); Serial.println();
+}
+
+static void pollHall() {
+  while (g_edgeRead != g_edgeWrite) {
+    noInterrupts();
+    const uint32_t at = g_edgeTimes[g_edgeRead];
+    const uint8_t level = g_edgeLevels[g_edgeRead];
+    g_edgeRead = (g_edgeRead + 1) & 127;
+    interrupts();
+    uint32_t arrival;
+    if (g_hallFilter.transition(at, level == HIGH, arrival)) g_hall.edge(arrival);
+  }
 }
 
 static void publishTelemetry() {
   JsonDocument doc;
-  doc["kind"] = "telemetry";
-  doc["node"] = g_nodeId;
-  doc["seq"]  = ++g_seq;
+  doc["kind"] = "telemetry"; doc["node"] = g_nodeId; doc["seq"] = ++g_seq;
+  doc["firmware"] = FIRMWARE;
   JsonObject health = doc["sensor_health"].to<JsonObject>();
-
+  JsonObject debug = doc["diagnostics"].to<JsonObject>();
   if (g_role == ROLE_THERMAL) {
-    if (g_mlxOk) {
-      double obj = mlx.readObjectTempC();
-      double amb = mlx.readAmbientTempC();
-      bool any = false;
-      if (!isnan(obj) && obj > -40 && obj < 380) { doc["temperature"] = round(obj * 100) / 100.0; any = true; }
-      if (!isnan(amb) && amb > -40 && amb < 125) { doc["ambient"]     = round(amb * 100) / 100.0; any = true; }
-      health["mlx"] = any ? "healthy" : "fault";
-    } else {
-      health["mlx"] = "fault";
-    }
+    float object, ambient;
+    const bool objOk = readTemperature(0x07, object), ambOk = readTemperature(0x06, ambient);
+    if (objOk) doc["temperature"] = round(object * 100) / 100.0;
+    if (ambOk) doc["ambient"] = round(ambient * 100) / 100.0;
+    health["mlx"] = objOk && ambOk ? "healthy" : "fault";
+    debug["read_errors"] = g_readErrors;
+    debug["pec_checked"] = true;
   } else if (g_role == ROLE_VIBRATION) {
-    float rms, kurt, crest;
-    if (vibStats(&rms, &kurt, &crest)) {
-      doc["vibration_rms"] = round(rms * 10000) / 10000.0;
-      // Schema caps these at 100; past that they are numerical artefacts.
-      if (kurt  < 100) doc["vibration_kurtosis"] = round(kurt  * 1000) / 1000.0;
-      if (crest < 100) doc["vibration_crest"]    = round(crest * 1000) / 1000.0;
-      health["vibration"] = "healthy";
-    } else if (g_vibN >= 8) {
-      // Sampling fine, but the board is dead still - RMS alone is honest.
-      float r2, k2, c2;
-      (void)k2; (void)c2;
-      double sum = 0;
-      for (uint16_t i = 0; i < g_vibN; i++) sum += g_vibBuf[i];
-      double mean = sum / g_vibN, m2 = 0;
-      for (uint16_t i = 0; i < g_vibN; i++) { double d = g_vibBuf[i] - mean; m2 += d * d; }
-      r2 = (float)sqrt(m2 / g_vibN);
-      doc["vibration_rms"] = round(r2 * 10000) / 10000.0;
-      health["vibration"] = "healthy";
-    } else {
-      health["vibration"] = "stale";
-    }
-    vibReset();
-  } else {
-    // Rotation speed from the Hall pulse train over the window just elapsed.
-    static uint32_t lastCount = 0;
-    static uint32_t lastRpmMs = 0;
-    uint32_t nowMs = millis();
-
-    noInterrupts();
-    uint32_t count = g_markerCount;
-    interrupts();
-
-    if (lastRpmMs != 0) {
-      uint32_t dtMs = nowMs - lastRpmMs;
-      uint32_t pulses = count - lastCount;
-      if (dtMs > 0) {
-        float revs = pulses / MAGNETS_PER_REV;
-        float rpm  = revs * 60000.0f / dtMs;
-        // A measured zero is a real reading here - it means "not turning" -
-        // so unlike an absent sensor this IS published, and the dashboard
-        // reports the belt as stopped rather than as unmonitored.
-        if (rpm >= 0 && rpm <= 6000) {
-          doc["motor_rpm"] = (int)(rpm + 0.5f);
-          if (ROLLER_CIRC_MM > 0.0f) {
-            float mps = (rpm / 60.0f) * (ROLLER_CIRC_MM / 1000.0f);
-            if (mps >= 0 && mps <= 12) doc["belt_speed"] = round(mps * 1000) / 1000.0;
-          }
-        }
+    pravaah::VibrationStats stats;
+    debug["samples"] = g_vibN; debug["odr_hz"] = 200;
+    debug["read_errors"] = g_readErrors; debug["invalid_samples"] = g_invalidSamples;
+    debug["fifo_overruns"] = g_fifoOverruns;
+    // One corrupt/clipped sample invalidates the window; do not hide it by
+    // dropping the sample and calculating a reassuring RMS from what remains.
+    if (g_adxlOk && !g_windowFault && !g_clipped && pravaah::vibrationStats(g_samples, g_vibN, stats)) {
+      doc["acceleration_x"] = round(stats.mean.x * 10000) / 10000.0;
+      doc["acceleration_y"] = round(stats.mean.y * 10000) / 10000.0;
+      doc["acceleration_z"] = round(stats.mean.z * 10000) / 10000.0;
+      doc["acceleration_magnitude"] = round(stats.magnitude * 10000) / 10000.0;
+      doc["vibration_rms"] = round(stats.rms * 10000) / 10000.0;
+      if (stats.ratiosValid) {
+        doc["vibration_crest"] = round(stats.crest * 1000) / 1000.0;
+        doc["vibration_kurtosis"] = round(stats.kurtosis * 1000) / 1000.0;
       }
+      health["vibration"] = "healthy";
+    } else health["vibration"] = g_windowFault || !g_adxlOk ? "fault" : g_clipped ? "clipped" : "stale";
+    g_vibN = 0; g_windowFault = g_clipped = false;
+  } else {
+    float rpm;
+    const uint32_t now = micros();
+    const bool measured = g_hall.rpm(now, MAGNETS_PER_CYCLE, rpm);
+    if (measured) {
+      doc["hall_rpm"] = round(rpm * 100) / 100.0;
+      if (HALL_ON_BELT && BELT_LENGTH_M > 0) doc["belt_speed"] = round(rpm / 60 * BELT_LENGTH_M * 10000) / 10000.0;
     }
-    lastCount = count;
-    lastRpmMs = nowMs;
-    health["speed"] = "healthy";
+    health["speed"] = measured ? (rpm > 0 ? "healthy" : "stale") : "missing";
+    debug["pulses"] = g_hall.count; debug["raw_edges"] = g_rawEdges;
+    debug["period_ms"] = g_hall.periodUs / 1000.0;
+    if (g_hall.seen) debug["last_pulse_age_ms"] = (now - g_hall.lastEdgeUs) / 1000;
+    debug["pin_level"] = digitalRead(PIN_MARKER);
+    debug["low_pulses"] = g_hallFilter.lowPulses;
+    debug["last_low_us"] = g_hallFilter.lastLowUs;
+    debug["max_low_us"] = g_hallFilter.maxLowUs;
+    debug["edge_overflows"] = g_edgeOverflows;
+    debug["magnets_per_cycle"] = MAGNETS_PER_CYCLE;
+    debug["hall_target"] = HALL_ON_BELT ? "belt" : "unconfirmed";
   }
-
   emit(doc);
 }
-
-static void publishJointPass() {
-  noInterrupts();
-  uint32_t dtUs = g_markerDtUs;
-  uint32_t cnt  = g_markerCount;
-  g_markerFresh = false;
-  interrupts();
-
-  JsonDocument doc;
-  doc["kind"]     = "joint";
-  doc["node"]     = g_nodeId;
-  doc["joint_id"] = "J01";          // identity of the one physical marker
-  doc["lap"]      = cnt;
-  doc["joint_marker_dt_left"] = round((dtUs / 1000.0) * 100) / 100.0;
-
-  // belt_speed and marker_distance_* are omitted on purpose: they need the
-  // wheel circumference and pulses-per-rev of a real rig. Publishing them from
-  // assumed geometry would be a fabricated measurement.
-  emit(doc);
-}
-
-// =================================================================== main ==
 
 void setup() {
-  Serial.begin(115200);
-  delay(400);
-  Serial.println();
-  Serial.println(F("=== PRAVAAH serial node ==="));
-
-  Wire.begin(PIN_I2C_SDA, PIN_I2C_SCL, 100000);
-  delay(100);
-
+  Serial.begin(115200); delay(400);
+  Wire.begin(PIN_I2C_SDA, PIN_I2C_SCL, 100000); Wire.setTimeOut(20); delay(100);
   detectRole();
 }
 
 void loop() {
-  static uint32_t lastTelemetry = 0;
-  static uint32_t lastVibSample = 0;
-  uint32_t now = millis();
-
-  if (g_role == ROLE_VIBRATION && now - lastVibSample >= VIB_SAMPLE_MS) {
-    lastVibSample = now;
-    float mag;
-    if (adxlMagnitude(&mag)) vibPush(mag);
+  static uint32_t lastTelemetry = millis(), lastSamplePoll = 0, lastRetry = 0;
+  const uint32_t now = millis();
+  if (g_role == ROLE_VIBRATION && now - lastSamplePoll >= 2) {
+    lastSamplePoll = now; collectAcceleration();
+    if (!g_adxlOk && now - lastRetry >= 3000) { lastRetry = now; g_adxlOk = initAdxl(); }
   }
-
-  if (g_role == ROLE_MARKER && g_markerFresh) publishJointPass();
-
-  if (now - lastTelemetry >= TELEMETRY_MS) {
-    lastTelemetry = now;
-    publishTelemetry();
-  }
+  if (g_role == ROLE_MARKER) pollHall();
+  if (now - lastTelemetry >= TELEMETRY_MS) { lastTelemetry = now; publishTelemetry(); }
 }

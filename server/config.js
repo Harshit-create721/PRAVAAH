@@ -50,7 +50,7 @@ export default {
       label: 'Test conveyor 1',
 
       // --- Measured geometry. Fill these in from the rig. ---
-      beltLengthM: null,        // total belt loop length, metres (tape measure)
+      beltLengthM: 1.2,         // user confirmed the full 120 cm loop on 2026-09-06
       beltWidthMm: null,        // belt width, mm
       driveRatedCurrentA: null, // motor nameplate FLA, amps
       driveRatedRpm: null,      // motor nameplate rpm
@@ -58,18 +58,19 @@ export default {
       gearRatio: null,          // motor rev : pulley rev
 
       // --- Speed sensor calibration ---
-      // Pulses the LM393/Hall sensor emits per full revolution of the wheel
-      // it watches, and that wheel's circumference in mm. belt_speed is
-      // computed on the ESP32 from these; they are repeated here so the
-      // dashboard can flag a mismatch.
+      // This rig measures one magnet per complete belt loop. Firmware computes
+      // belt speed from the 1.2 m loop. Wheel geometry is reserved for a future
+      // wheel-mounted target; these metadata fields do not reconfigure a board.
       pulsesPerRev: null,
       speedWheelCircumferenceMm: null,
+      hallTarget: 'belt',       // one taped magnet travels with the belt
+      magnetsPerBeltLoop: 1,
 
-      // Rotation speed the roller runs at when healthy, rpm. The speed rule
+      // Normal motor shaft speed, rpm. The speed rule
       // compares measured motor_rpm against this. Leave null and the rule is
       // listed under "Not yet connected" instead of guessing what normal is:
       // there is no safe default, because normal is whatever YOUR drive does.
-      // Run the belt, read motor_rpm off the dashboard, put that number here.
+      // This belt-mounted Hall sensor does not provide motor_rpm.
       nominalRpm: null,
 
       // --- Joints / splices ---

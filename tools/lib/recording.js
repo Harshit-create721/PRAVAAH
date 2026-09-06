@@ -136,7 +136,7 @@ export class Recording {
   }
 
   signalReport(now = Date.now()) {
-    return Object.fromEntries(['temperature', 'vibration_rms', 'motor_rpm'].map((channel) => {
+    return Object.fromEntries(['temperature', 'vibration_rms', 'hall_rpm', 'motor_rpm', 'belt_speed'].map((channel) => {
       const last = this.lastChannelAt.get(channel);
       return [channel, !last ? 'not seen' : now - last > 5000 ? 'stale' : 'receiving'];
     }));

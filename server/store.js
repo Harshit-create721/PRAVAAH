@@ -74,6 +74,11 @@ export class Store {
         ts INTEGER NOT NULL, topic TEXT, reason TEXT, sample TEXT
       );
     `);
+    // Existing rigs retain their history when firmware adds measured channels.
+    const existing = new Set(this.db.prepare('PRAGMA table_info(telemetry)').all().map((c) => c.name));
+    for (const channel of TELEM_COLS) {
+      if (!existing.has(channel)) this.db.exec(`ALTER TABLE telemetry ADD COLUMN ${channel} REAL`);
+    }
   }
 
   #prepare() {

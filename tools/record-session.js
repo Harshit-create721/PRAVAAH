@@ -7,7 +7,7 @@ import { Recording } from './lib/recording.js';
 
 const HELP = `Record a labelled conveyor run while the gateway and USB bridge are running.
 
-  npm run record -- --label healthy_empty --state steady --load-kg 0 --hall-target roller
+  npm run record -- --label unlabelled --state unknown --hall-target belt
 
 Options:
   --label TEXT          Required operator description; use unlabelled if unknown

@@ -155,7 +155,7 @@ function handleLine(path, line) {
     client.publish(topicTelemetry, JSON.stringify(msg));
     stats.frames++;
     bump(msg.node);
-    announce(msg.node, path, msg.sensor_health);
+    announce(msg.node, path, msg.sensor_health, msg.firmware);
   } else if (kind === 'joint') {
     client.publish(topicJoint, JSON.stringify(msg));
     stats.joints++;
@@ -166,10 +166,11 @@ function handleLine(path, line) {
 }
 
 // Track a node as seen, and announce it the first time.
-function announce(node, path, health) {
+function announce(node, path, health, firmware) {
   if (!node) return;
   const known = nodes.get(node);
-  nodes.set(node, { path, lastSeen: Date.now(), health: health ?? known?.health ?? null, online: true });
+  nodes.set(node, { path, lastSeen: Date.now(), health: health ?? known?.health ?? null,
+    firmware: firmware ?? known?.firmware ?? 'pravaah-serial-node 0.1.0', online: true });
   if (!known) {
     publishStatus(node, true);
     console.log(`  node online: ${node}  (${short(path)})`);
@@ -179,7 +180,7 @@ function announce(node, path, health) {
 function publishStatus(node, online) {
   const n = nodes.get(node);
   const body = online
-    ? { online: true, node, firmware: 'pravaah-serial-node 0.1.0',
+    ? { online: true, node, firmware: n?.firmware,
         transport: `usb:${short(n?.path ?? '')}`, sensor_health: n?.health ?? undefined }
     : { online: false, node };
   client.publish(topicStatus(node), JSON.stringify(body), { retain: true });

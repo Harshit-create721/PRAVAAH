@@ -37,7 +37,7 @@ const num = (v, d = 2) =>
   v === null || v === undefined || !Number.isFinite(v) ? null : Number(v).toFixed(d);
 
 function decimals(unit) {
-  if (unit === 'rpm') return 0;
+  if (unit === 'rpm') return 1;
   if (unit === 'mm' || unit === '%' || unit === 'K' || unit === '°C') return 1;
   if (unit === 'g') return 3;
   return 2;
@@ -154,7 +154,14 @@ function renderBanner(cv) {
   } else if (missingGeom) {
     b.className = 'banner';
     b.dataset.kind = 'wait';
-    b.textContent = 'BELT GEOMETRY NOT ENTERED — slip ratio and marker-distance rules are disabled until pulleyDiameterMm, gearRatio and beltLengthM are set in server/config.js';
+    const missing = [
+      ['beltLengthM', 'full belt loop length'],
+      ['pulleyDiameterMm', 'drive pulley diameter'],
+      ['gearRatio', 'gear ratio'],
+    ].filter(([key]) => !(cv.geometry[key] > 0)).map(([, label]) => label);
+    const loop = cv.geometry.beltLengthM > 0
+      ? `BELT LOOP ${cv.geometry.beltLengthM.toFixed(2)} m — ` : '';
+    b.textContent = `${loop}Additional measurements needed for geometry-based rules: ${missing.join(', ')}. Hall belt RPM is measured directly from magnet passes.`;
   } else if (cv.risk === 'critical' || cv.risk === 'urgent_inspection') {
     b.className = 'banner';
     b.dataset.kind = 'alert';
@@ -600,16 +607,16 @@ function buildLabels(cv, jointBands, q) {
   // A marker is green only when its channel is arriving now - this is the row
   // an operator checks first when a part goes grey.
   const sensors = [
-    // Current only. motor_rpm now comes from the Hall sensor on the roller, and
-    // showing it here too would imply a CT is fitted when none is.
+    // Current only. Hall cycle speed has its own callout; showing it here
+    // would imply a CT is fitted when none is.
     { p: [x1, cy + 52, MOTOR_Z], label: 'CT', chans: ['motor_current_rms'],
       show: ['motor_current_rms'] },
     { p: [x1, cy + 58, M.face / 2 + 16], label: 'VIB-DRIVE', chans: ['vibration_rms'],
       show: ['vibration_rms', 'vibration_crest'] },
     { p: [40, cy + r + 74, 0], label: 'CAM', chans: ['belt_offset_left', 'belt_offset_right'],
       show: ['belt_offset_left', 'belt_offset_right'] },
-    { p: [x0 + 118, cy - r - 40, -(M.rail + 8)], label: 'HALL SPEED', chans: ['motor_rpm', 'belt_speed'],
-      show: ['motor_rpm', 'belt_speed'] },
+    { p: [x0 + 118, cy - r - 40, -(M.rail + 8)], label: 'HALL SPEED', chans: ['hall_rpm', 'motor_rpm', 'belt_speed'],
+      show: ['hall_rpm', 'belt_speed'] },
     { p: [IR_X, cy - r - 34, hw + 26], label: 'IR TEMP', chans: ['temperature'],
       show: ['temperature', 'temperature_delta'] },
     {
@@ -952,11 +959,17 @@ function renderChannels(cv) {
       <div class="chan-group-title">${GROUP_TITLE[g] ?? g}</div>
       ${rows.map(([key, c]) => {
         const has = c.value !== null && c.value !== undefined;
+        const hall = key === 'hall_rpm' ? cv.hallDiagnostics : null;
+        const hallFresh = hall && Date.now() - hall.ts < 5000;
+        const waiting = hallFresh && !has;
+        const hallNote = hallFresh
+          ? `${hall.pulses ?? 0} magnet passes${hall.period_ms > 0 ? ` · loop ${(hall.period_ms / 1000).toFixed(2)} s` : ' · waiting for two passes to measure RPM'}`
+          : '';
         const v = has
           ? `<span class="chan-value">${num(c.value, decimals(c.unit))}<span class="unit">${esc(c.unit)}</span></span>`
           : `<span class="chan-value nosignal">NO SIGNAL</span>`;
         return `<div class="chan-row${DERIVED.has(key) ? ' derived' : ''}">
-          <div class="chan-name">${esc(c.label)}<span class="badge" data-state="${c.state}">${c.state.toUpperCase()}</span></div>
+          <div class="chan-name">${esc(c.label)}<span class="badge" data-state="${waiting ? 'stale' : c.state}">${waiting ? 'WAITING' : c.state.toUpperCase()}</span>${hallNote ? `<small class="chan-note">${esc(hallNote)}</small>` : ''}</div>
           ${v}
         </div>`;
       }).join('')}
@@ -976,7 +989,8 @@ function renderTrendOptions(cv) {
   const sel = $('trendChannel');
   sel.innerHTML = Object.entries(cv.channels)
     .map(([k, c]) => `<option value="${esc(k)}">${esc(c.label)}</option>`).join('');
-  sel.value = 'motor_current_rms';
+  sel.value = ['hall_rpm', 'vibration_rms', 'temperature'].find((key) => cv.channels[key]?.state === 'live')
+    ?? (cv.channels.hall_rpm ? 'hall_rpm' : Object.keys(cv.channels)[0]);
   sel.onchange = loadTrend;
   $('trendWindow').onchange = loadTrend;
   trendInited = true;

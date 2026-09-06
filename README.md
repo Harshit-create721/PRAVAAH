@@ -3,8 +3,10 @@
 **प्रवाह** — *flow*. Real-time monitoring and decision support for conveyor
 belt joints and splices on ROM, overland and underground belts.
 
-For the three-sensor USB rig, see [recording real conveyor runs for ML](docs/conveyor-recording.md):
-mounting, calibration limitations, and the `npm run record -- --label unlabelled` session recorder.
+For the three-sensor USB rig, start with the [dataset collection plan](docs/dataset-collection-plan.md),
+[recording commands](docs/conveyor-recording.md), [data dictionary](docs/dataset-schema.md),
+and [verified sensor fixes](docs/sensor-debugging.md). The configured speed reference
+is one magnet on a **1.20 m full belt loop**; it measures belt RPM, not motor RPM.
 
 Built against SIH26008, Ministry of Steel — *AI-Enabled Conveyor Belt Joint
 Rupture and Damage Prediction*. The problem statement is a steel-plant one;
@@ -517,11 +519,14 @@ Risk ladder: `HEALTHY → OBSERVE → PLAN INSPECTION → URGENT INSPECTION →
 CRITICAL`, plus `NO DATA` before anything is measured. The conveyor's level is
 the worst open alarm. Acknowledge an alarm from the dashboard, and close it
 with what the inspection found — that outcome is written to the `maintenance`
-table and is your labelled dataset for the model later.
+table. These records can supply label evidence after review and time alignment;
+an alarm or acknowledgement alone is not a verified fault label.
 
 ### Adding your model
 
-Train offline on the SQLite file, then publish scores to the `analysis` topic:
+Train offline on reviewed session captures using the [dataset plan](docs/dataset-collection-plan.md),
+then publish validated scores to the `analysis` topic. SQLite telemetry has a
+14-day retention window and does not preserve all firmware diagnostics:
 
 ```json
 { "ts": 1756012345678, "model_version": "iforest-v0.3",

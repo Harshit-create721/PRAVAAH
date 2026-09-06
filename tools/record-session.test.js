@@ -113,7 +113,9 @@ test('health-only messages and rejected numbers do not count as useful telemetry
   const summary = readJSON(recording.directory, 'summary.json');
   assert.equal(summary.counts.telemetry, 2);
   assert.equal(summary.counts.valid_telemetry, 0);
-  assert.deepEqual(Object.values(summary.final_signals), ['not seen', 'not seen', 'not seen']);
+  assert.deepEqual(summary.final_signals, {
+    temperature: 'not seen', vibration_rms: 'not seen', hall_rpm: 'not seen', motor_rpm: 'not seen', belt_speed: 'not seen',
+  });
 });
 
 test('CLI records all three sensor streams through an isolated MQTT broker and flushes on stop', { timeout: 12000 }, async (t) => {
@@ -147,13 +149,15 @@ test('CLI records all three sensor streams through an isolated MQTT broker and f
   for (const payload of [
     { node: 'bench-thermal', seq: 1, temperature: 31, ambient: 26 },
     { node: 'bench-vibration', seq: 1, vibration_rms: 0.08 },
-    { node: 'bench-marker', seq: 1, motor_rpm: 120 },
+    { node: 'bench-marker', seq: 1, hall_rpm: 34.5 },
   ]) await publisher.publishAsync(`${prefix}/telemetry`, JSON.stringify(payload), { qos: 1 });
   const [code] = await exited;
   assert.equal(code, 0, errors + output);
   const session = join(directory, readdirSync(directory)[0]);
   assert.equal(readJSON(session, 'summary.json').counts.telemetry, 3);
-  assert.deepEqual(Object.values(readJSON(session, 'summary.json').final_signals), ['receiving', 'receiving', 'receiving']);
+  assert.deepEqual(readJSON(session, 'summary.json').final_signals, {
+    temperature: 'receiving', vibration_rms: 'receiving', hall_rpm: 'receiving', motor_rpm: 'not seen', belt_speed: 'not seen',
+  });
   assert.equal(readJSON(session, 'session.json').source, 'synthetic');
   assert.equal(readLines(session, 'frames.jsonl').length, 3);
 });

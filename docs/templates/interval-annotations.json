@@ -1,0 +1,20 @@
+{
+  "template": true,
+  "annotation_version": 1,
+  "session_id": null,
+  "time_basis": "UTC epoch milliseconds; half-open [start_ms, end_ms) intervals",
+  "intervals": [],
+  "interval_fields": {
+    "start_ms": null,
+    "end_ms": null,
+    "boundary_uncertainty_ms": null,
+    "operating_state": "unknown",
+    "reviewed_condition": "unlabelled",
+    "thermal_stage": "unknown",
+    "episode_id": null,
+    "observed_by": null,
+    "evidence_paths": [],
+    "notes": null
+  },
+  "instructions": "Copy interval_fields for each actual observed interval into intervals, then remove interval_fields and template. Record uncertain transition regions explicitly; do not invent exact timing. This is a manual sidecar, not an interactive recorder command."
+}

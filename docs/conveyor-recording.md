@@ -1,73 +1,90 @@
-# Recording the real conveyor for machine learning
+# Record the three-sensor conveyor
 
-The existing USB setup uses three ESP32 boards, one each for the ADXL345,
-MLX90614 and A3144. It already publishes telemetry to MQTT and SQLite. The
-session recorder adds labelled, permanent captures outside the dashboard's
-14-day telemetry retention. It does not train a model or establish a fault diagnosis.
+Updated 6 September 2026. This is the operating guide for the USB rig. Read the
+[collection plan](dataset-collection-plan.md) for the campaign and model scope,
+the [data dictionary](dataset-schema.md) before preparing training rows, and
+the [debugging report](sensor-debugging.md) for firmware changes and evidence.
+Earlier roller-magnet examples and half-second pulse counting instructions are
+superseded for this rig.
 
-## What these sensors can tell us
+## Confirmed setup
 
-| Sensor | Suggested first mounting position | Available readings |
-|---|---|---|
-| ADXL345 | Rigid mount on the stationary drive-bearing housing or adjacent rigid support; record orientation | Vibration RMS, kurtosis, crest factor |
-| MLX90614 | Fixed bracket aimed at that bearing housing or motor surface, with an unobstructed view | Surface temperature and sensor-package temperature (called `ambient` in the protocol) |
-| A3144 | Fixed bracket facing a securely attached magnet on a roller, at a repeatable gap | Pulse timing and rotation-speed estimate |
+| Item | Configuration |
+|---|---|
+| Conveyor | `factory / CV-01` |
+| Full belt loop | **1.20 m**, confirmed by the operator |
+| Hall target | One taped magnet on the moving belt, one detection per loop |
+| Hall calculation | `hall_rpm = 60 / loop_seconds`; `belt_speed = 1.20 / loop_seconds` |
+| Hall input | GPIO27, input pull-up; actual module supply/output wiring needs inspection |
+| Acceleration/vibration | ADXL345, SDA21/SCL22, 200 Hz FIFO, ±8 g; summaries every 500 ms |
+| Temperature | MLX90614, SDA21/SCL22, 100 kHz SMBus with PEC checks; reads every 500 ms |
+| Transport | Three ESP32 USB serial ports at 115200 baud → bridge → local MQTT → recorder and gateway |
+| Dashboard | `http://localhost:8811` |
 
-Mount with the conveyor powered off and isolated. Keep boards and cables on
-stationary structure, clear of the moving belt and pinch points. Fix the
-vibration board rigidly: a loose breadboard measures its own movement.
-The ADXL345 manufacturer explains why mounting near a rigid attachment matters
-in its [datasheet, mechanical mounting section](https://www.analog.com/media/en/technical-documentation/data-sheets/ADXL345.pdf).
-The MLX90614 field of view depends on the variant; the target should fill it,
-and shiny metal can give misleading IR temperatures. Its `ambient` reading is
-the sensor's temperature, not an independent room thermometer. Check the
-[manufacturer's documentation](https://www.melexis.com/en/documents/documentation/datasheets/datasheet-mlx90614).
+Identify ports from each board's published `node`, not USB suffix alone. The
+verified mapping was thermal `usbserial-0001`, vibration `usbserial-5`, Hall
+`usbserial-6`. Record actual mounting location, orientation and IR target; these
+have not been independently surveyed. Online sensors do not establish normal
+mechanical condition.
 
-These channels are a useful starting point for learning normal behaviour and
-flagging unusual vibration, heating or speed patterns. A score alone does not
-identify a broken splice or predict when rupture will occur. For that target,
-collect inspected joint condition, identifiable joint passages, relevant
-measurements such as images/spacing, and observed deterioration or failure
-outcomes over time. Normal-only data can support novelty detection; see
-[scikit-learn's explanation](https://scikit-learn.org/stable/modules/outlier_detection.html).
+Use USB firmware **0.2.2** for the new campaign. It retains the 0.2.1 temperature
+and vibration definitions and corrects Hall pulse timestamping and artificial
+between-pass RPM decline. Verify version strings in raw frames and preserve
+source hashes. Do not mix older speed features without a compatibility review.
 
-## Start a capture
+## Before each run
 
-Plug in the three ESP32 boards. From the `PRAVAAH` directory, start the existing
-gateway and bridge if they are not already running:
+1. Record an inspection and the actual condition, speed setting and load.
+   Unknown load stays unknown; `--load-kg 0` means verified no load.
+2. Keep sensor mounting, aim, magnet count and wiring fixed within a run. Make
+   physical adjustments with the conveyor stopped and isolated; keep stationary
+   boards and cables clear of the moving belt and pinch points.
+3. Leave the gateway running if it is already up. Otherwise start it from this
+   repository with `./start-pravaah.sh`.
+4. Check all three nodes and actual channels: advancing Hall pass count while
+   moving, valid temperature and acceleration/vibration. `Motor speed` stays
+   absent because the belt magnet does not measure motor RPM. **12/20 channels**
+   is expected; the others require additional sensors.
+5. Stop any bench publisher. The live recorder filters known `bench-*` sources;
+   this is a naming convention, not authentication.
+6. Check disk space and laptop clock. Avoid flashes, bridge restarts, laptop
+   sleep and clock changes during a labelled run.
+
+Secure the ADXL rigidly at an appropriate stationary measurement point and
+record that point. Mounting affects vibration; see the [ADXL345 mounting
+guidance](https://www.analog.com/media/en/technical-documentation/data-sheets/ADXL345.pdf).
+Record IR target, gap and variant; surface properties and field of view affect
+its reading. See the [MLX90614 documentation](https://www.melexis.com/en/documents/documentation/datasheets/datasheet-mlx90614).
+
+## Start and stop recording
+
+In a second terminal inside `PRAVAAH`, this five-minute check requires no claim
+about the mechanical condition:
 
 ```bash
-./start-pravaah.sh
+npm run record -- --label unlabelled --state unknown --hall-target belt --duration 300 --notes "Acquisition check; condition and load not verified"
 ```
 
-In a second terminal, also in `PRAVAAH`, start a run. Choose the label from
-what you actually know; `unlabelled` is appropriate before inspection:
+Only after operator inspection and after settling at a constant speed, an
+inspected empty-belt example is:
 
 ```bash
-npm run record -- --label unlabelled --hall-target roller --notes "First mounting check"
+npm run record -- --label normal_inspected --state steady --load-kg 0 --hall-target belt --duration 900 --notes "Inspection evidence and mount details recorded in annotation.json"
 ```
 
-The recorder prints the new session folder and subscription confirmation. Every
-five seconds it prints counts and whether temperature, vibration and RPM are
-arriving, stale or absent. `receiving` describes data arrival only; inspect the
-sensor-health fields and physical readings to determine measurement quality.
-Ctrl+C flushes files and writes a summary. No numeric telemetry makes the
-recorder exit with a failure status so an empty run is not mistaken for success.
+Add `--speed-setting` with the actual observed controller setting. Replace load
+zero with a measured mass for a loaded run. For unknown condition use
+`unlabelled`; for unknown load omit `--load-kg`.
 
-After confirming normal mechanical condition, an example steady, empty-belt
-run is:
+Wait for `Recording subscribed`. Timed runs end the specified wall-clock duration
+after the first subscription, including any later outages. Ctrl+C closes and
+syncs an untimed capture. Start a new session whenever speed, load, mounting or
+intended condition changes.
 
-```bash
-npm run record -- --label healthy_empty --state steady --load-kg 0 --hall-target roller --duration 600 --notes "Inspected before run; fixed sensor mounts"
-```
-
-Use `--load-kg` only for a known applied load, and `--speed-setting` for an
-observed controller setting. Neither is inferred from a sensor. Use separate
-captures for startup, steady operation and stopping, and stop/restart a capture
-when the intended condition changes. The label applies to every row in that
-session; starting a steady-state recording while the belt is still stopped
-would mislabel that interval. Timed runs end the specified wall-clock duration
-after the first successful subscription, including any later outages.
+For startup/shutdown, record with `--label unlabelled --state unknown` and add
+observed state intervals afterward. The recorder has no interactive state-change
+command: its label/state describe the whole session. Never label a mixed
+stopped/startup/steady capture entirely `steady`.
 
 ```bash
 npm run record -- --help
@@ -75,96 +92,50 @@ npm run record -- --help
 
 ## Files and interpretation
 
-Every run creates a unique folder in `data/recordings/`. The recorder never
-prunes these folders and never overwrites a previous session. Copy completed
-folders to your dataset backup; watch free disk space during long campaigns.
+Each run creates a unique directory under `data/recordings/`. These directories
+are gitignored, never automatically pruned by the recorder, and **not automatically
+backed up**. The dashboard database has **14-day telemetry retention**; session
+files are the dataset acquisition source.
 
-| File | Contents |
+| File | Meaning |
 |---|---|
-| `session.json` | Operator label, load, speed setting, Hall target, notes, asset configuration and channel units |
-| `frames.jsonl` | Unmodified accepted MQTT payloads with topic and recorder arrival time |
-| `telemetry.csv` | One row per telemetry message, with validated numeric channels, node, sequence, health and quality issues |
-| `joint.csv` | One row per incoming Hall/joint event; repeated lap numbers remain separate |
-| `excluded.jsonl` | Rejected source, retained, malformed and unidentified messages, with reasons; exclude this file from training |
-| `events.jsonl` | Subscription, disconnection, reconnection and stop events |
-| `summary.json` | Final counts and signal status, created on a clean stop |
+| `session.json` | Original operator label/state/load/notes, configuration snapshot, units and timestamp interpretation |
+| `frames.jsonl` | MQTT topic, arrival time and parsed payload, including firmware/diagnostics; raw telemetry, **not raw acceleration samples** |
+| `telemetry.csv` | One message per row; validated channels, sequence, node, health and validation issues; blanks mean missing |
+| `joint.csv` | Legacy event table; current belt-magnet firmware emits no joint events, so a header-only file is expected |
+| `excluded.jsonl` | Retained, malformed, unidentified or wrong-source messages, with reasons |
+| `events.jsonl` | Recorder subscription, connection and stop events |
+| `summary.json` | Counts and final signal arrival status, written on clean completion |
 
-Files are appended as packets arrive and explicitly synced every five seconds
-and on a clean stop. A power loss can lose recent data or leave a partial final
-line; an absent summary indicates the capture did not complete normally.
-The recorder cannot recover packets lost before it received them. The existing
-USB bridge publishes at MQTT QoS 0, so the recorder's QoS 1 subscription alone
-cannot guarantee delivery. Sequence gaps and connection events are evidence
-for rejecting incomplete training windows, not a recovery mechanism.
+Sync occurs every five seconds and on close. Missing summaries and partial
+final lines require review; preserve originals. Retained startup status messages
+are normally excluded, so inspect reasons before interpreting exclusions as loss.
 
-Missing channels stay blank. The three boards publish separately, so a thermal
-row does not also contain vibration and RPM. Assemble training windows using
-timestamps and node identity later; do not turn blanks into zero or repeatedly
-reuse stale readings. `ts_ms` is the validated publisher time, and
-`received_at_ms` is recorder arrival time. USB publisher timestamps already
-come from the laptop bridge; this is not hardware synchronisation. Preserve
-session boundaries, quality flags, restart indicators and health information.
+Three nodes publish roughly two telemetry frames/second each; status messages
+are additional. A thermal row does not contain vibration or RPM. Firmware and
+diagnostics are **not** flattened into the CSV: keep `frames.jsonl`. The recorder
+subscribes to MQTT, so the gateway-derived `temperature_delta` is normally absent;
+derive it from valid paired temperature registers during preprocessing.
 
-Known `bench-*` synthetic sources are excluded from live captures. This is a
-convention check, not source authentication. Stop the bench publisher during
-real acquisition. To deliberately test the recorder with the bench harness,
-use `--source synthetic`; the default output becomes `data/synthetic-recordings/`.
-Do not train a real-machine model on those protocol-test values.
+The bridge publishes at QoS 0. A recorder QoS 1 subscription cannot recover
+upstream losses. Timestamps are laptop bridge/recorder arrival times, not
+hardware-synchronised sample times. Never fill missing sensors with zeros or
+reuse stale readings. See the [data dictionary](dataset-schema.md).
 
-## Firmware and calibration work before a training campaign
+## Review and preserve each run
 
-1. **Choose what the Hall sensor watches.** The current serial firmware emits
-   both `motor_rpm` and `joint_id: J01` from the same pulse stream. A roller
-   magnet measures roller rotation, not motor rotation or belt-joint passage.
-   `--hall-target` records the choice but does not change firmware behaviour.
-   Joint rows are flagged as unverified unless you specify `belt`; even then
-   you must verify the marker actually identifies the intended physical joint.
-   Do not use roller pulses as joint-degradation labels. If the magnet is on
-   the belt, the current roller-RPM conversion is not valid.
-2. **Measure speed geometry.** Set `MAGNETS_PER_REV` to the actual magnet count
-   and `ROLLER_CIRC_MM` to the measured circumference when sensing the roller.
-   Belt speed from a drive roller assumes no slip between that roller and belt.
-   An independent belt-motion reference is needed to measure that slip.
-   Match metadata in `server/config.js`; do not guess unknown values.
-3. **Check low-speed RPM.** The current counter window is about 500 ms. With
-   one magnet, one pulse changes the reported value by roughly 120 RPM.
-   A slowly rotating conveyor can therefore alternate between zero and 120 RPM
-   while moving steadily. For that rig, period-based timing with an appropriate
-   no-pulse timeout is needed before using speed as a training feature.
-4. **Decide whether raw vibration is needed.** Current firmware polls roughly
-   every 5 ms and emits magnitude-based statistics every 500 ms. The buffer holds
-   at most 128 samples; it normally collects about 100 per output window. Raw
-   X/Y/Z samples and their timing are not transmitted or saved. `frames.jsonl`
-   cannot recover them. For frequency analysis or directional fault signatures,
-   add timestamped axis capture and verify actual sampling, clipping and gaps.
-5. **Resolve the ADXL345 rate mismatch.** Firmware writes `BW_RATE = 0x0C`,
-   whose comment says 200 Hz but whose actual output rate is 400 Hz, while the
-   loop polls at about 200 Hz. The datasheet specifies `0x0B` for 200 Hz (Table
-   7). Match device rate, bandwidth and acquisition timing during firmware
-   calibration; do not infer an accurately sampled 200 Hz waveform from the
-   current code. [ADXL345 datasheet](https://www.analog.com/media/en/technical-documentation/data-sheets/ADXL345.pdf)
+1. Check `summary.json` and numeric telemetry from each expected node. `receiving`
+   describes arrival only; it does not prove measurement quality.
+2. Apply the [v1 quality rules](dataset-collection-plan.md#quality-rules-for-v1)
+   to health, diagnostics, sequences, timing and Hall periods. The recorder does
+   **not** perform this full dataset acceptance review automatically.
+3. Copy [session-annotation.json](templates/session-annotation.json) into the
+   capture as `annotation.json`. Fill inspection evidence, mount identity and
+   reviewed label. Use [interval-annotations.json](templates/interval-annotations.json)
+   for mixed-state runs. These are manual sidecars; the recorder does not read them.
+4. Keep unreviewed sessions out of normal-model training. Preserve the original
+   label; record later corrections, evidence and review dates in the annotation.
+5. Copy complete sessions, annotations and source snapshots to a second storage
+   location. Verify SHA-256 checksums. A backup destination is still to be selected.
 
-The recorder does not flash boards or alter these calibration values.
-
-## Build a dataset that can answer the prediction question
-
-Start with an acquisition pilot: record the stationary rig, startups, empty
-steady running, and known safe loads at the available speeds. For a first
-check, 5–10 minutes per steady condition across several independent runs is
-useful for discovering mounting noise, lost packets and repeatability issues.
-This is a pilot, not a claim of sufficient data to predict failure. Thermal
-behaviour may need longer runs to approach a stable temperature.
-
-Repeat normal conditions across days. Record maintenance, inspections, mounting
-changes, load, commanded speed, and confirmed fault observations. Keep unknown
-conditions labelled unknown. Alarm-rule output is not independent ground truth.
-Do not damage, jam or overload a moving conveyor to generate fault examples.
-
-For an initial anomaly model, assemble complete quality-checked windows and
-compare vibration statistics and temperature trends at similar speed/load.
-Fit normalisation and the model only on training sessions. Hold out complete
-later runs or days for evaluation, with a gap between adjacent windows; random
-splitting of neighbouring samples can inflate measured performance.
-[scikit-learn's guidance on grouped and time-series validation](https://scikit-learn.org/stable/modules/cross_validation.html)
-explains the reason. Assess false alarms on held-out healthy operation and
-detection against independently confirmed events before making prediction claims.
+The recorder does not train models, diagnose faults or control the conveyor.

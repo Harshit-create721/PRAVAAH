@@ -315,7 +315,7 @@ export function evaluateTelemetry(conveyor, values) {
     skipped.push({
       rule: 'vibration_impulsive',
       why: `vibration ${fmt(values.vibration_rms ?? 0, 3)} g RMS is below the ${fmt(crestFloor, 2)} g floor `
-        + 'where crest factor is meaningful - machine is effectively still',
+        + 'where crest factor is meaningful',
     });
   } else {
     skipped.push({ rule: 'vibration_impulsive', why: 'needs vibration_crest and vibrationCrest in config' });

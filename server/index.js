@@ -18,6 +18,7 @@ import { CHANNELS, JOINT_CHANNELS, validate, normaliseHealth, TOPICS } from './s
 import { evaluateJointPass, evaluateTelemetry, inferOperatingState, worse } from './rules.js';
 import { componentStatus } from './components.js';
 import { createRelayPublisher } from './relay-publisher.js';
+import { applySensorHealth } from './sensor-health.js';
 
 const ROOT = resolve(import.meta.dirname, '..');
 const WEB = join(ROOT, 'web');
@@ -133,17 +134,24 @@ function onTelemetry(cv, payload, raw) {
     store.reject('telemetry', `${rej.key}=${rej.val}: ${rej.why}`, raw);
     cv.counters.rejects++;
   }
-  if (!r.ok) return;
-
   const node = typeof payload.node === 'string' ? payload.node : null;
-  store.telemetry(r.ts, cv.id, node, payload.seq, r.values);
+  if (node && Number.isFinite(payload.diagnostics?.pulses)) {
+    const d = payload.diagnostics;
+    cv.hallDiagnostics = { node, ts: r.ts };
+    for (const key of ['pulses', 'raw_edges', 'period_ms', 'last_pulse_age_ms', 'pin_level']) {
+      if (Number.isFinite(d[key]) && d[key] >= 0) cv.hallDiagnostics[key] = d[key];
+    }
+  }
+  if (payload.sensor_health) applySensorHealth(cv, node, payload.sensor_health, r.values);
+  if (node) touchNode(node, cv.id, payload);
+  if (!r.ok && !payload.sensor_health) return;
+  if (r.ok) store.telemetry(r.ts, cv.id, node, payload.seq, r.values);
   cv.counters.telemetry++;
   cv.lastMessageTs = Date.now();
 
   for (const [k, v] of Object.entries(r.values)) {
     cv.channels[k] = { v, ts: r.ts, node };
   }
-  if (payload.sensor_health) cv.sensorHealth = normaliseHealth(payload.sensor_health);
 
   // Everything below reasons about the machine, so it reads the merged state
   // rather than this one packet.
@@ -164,11 +172,11 @@ function onTelemetry(cv, payload, raw) {
     cv.channels.slip_ratio = { v: slip, ts: r.ts, node: 'derived' };
   }
   if (Number.isFinite(merged.temperature) && Number.isFinite(merged.ambient)) {
-    cv.channels.temperature_delta = { v: merged.temperature - merged.ambient, ts: r.ts, node: 'derived' };
-  }
+    cv.channels.temperature_delta = { v: merged.temperature - merged.ambient,
+      ts: Math.min(cv.channels.temperature.ts, cv.channels.ambient.ts), node: 'derived' };
+  } else delete cv.channels.temperature_delta;
 
   applyFindings(cv, null, ev.findings, 'telemetry');
-  if (node) touchNode(node, cv.id, payload);
 }
 
 function onJointPass(cv, payload, raw, source) {
@@ -401,6 +409,7 @@ function snapshot() {
         risk: cv.risk, riskSource: cv.riskSource,
         analysis: cv.analysis,
         sensorHealth: cv.sensorHealth ?? null,
+        hallDiagnostics: cv.hallDiagnostics ?? null,
         telemetrySkipped: cv.telemetrySkipped ?? [],
         joints,
         alarms,
