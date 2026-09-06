@@ -85,7 +85,7 @@ This means there is **no motor current, no motor power, no motor-side RPM, no lo
 | duplicate-timestamp fraction, last quarter of segments | 83.8% |
 | first segment above 50% duplicated | `S022` |
 
-This is a **real defect worth fixing on the hardware side**: `seq` keeps incrementing correctly (no gaps, no resets) while `ts_ms` stalls, so distinct samples are being stamped with the same device time. Consequences accepted in this pipeline:
+`seq` keeps incrementing correctly (no gaps, no resets) while `ts_ms` repeats. **This is expected for this rig, not a firmware bug.** `docs/dataset-schema.md` in the PRAVAAH repo states that for the USB bridge `ts_ms` carries *laptop arrival time*, not a device acquisition clock, so frames flushed together over USB genuinely share one arrival timestamp. It remains a real limitation for anything needing per-sample timing. Consequences accepted in this pipeline:
 
 - Window-level **aggregate** statistics (mean, std, RMS, percentiles, kurtosis) stay valid -- they do not depend on intra-burst ordering.
 - Window-level **slope / rate** features are only accurate to roughly the burst period (~2 s). They are kept, but should not be read as fine-grained derivatives.
@@ -183,7 +183,7 @@ Measured yield for candidate settings (a window is only emitted when all three s
 | # | problem | severity | how the pipeline handles it |
 |---|---|---|---|
 | 1 | No fault labels anywhere (`label = unlabelled`) | blocking for supervised work | Unsupervised anomaly detection only. No accuracy / precision / recall / RUL is computed or claimed. |
-| 2 | `ts_ms` stalls; up to ~100% duplicated timestamps late in the session | high | Aggregate features kept; slope features flagged as ~2 s resolution; per-sample timing not used. |
+| 2 | `ts_ms` is USB arrival time, not an acquisition clock; up to ~100% duplicated timestamps late in the session | high | Aggregate features kept; slope features flagged as ~2 s resolution; per-sample timing not used. |
 | 3 | Temperature is a monotone warm-up confounded with session time | high | Baseline fitted over the whole session; `temperature - ambient` features added; chronological split reported only as a drift diagnostic. |
 | 4 | RPM effectively constant (20.37-20.69) and quantised to ~0.33 Hz updates | high | RPM features retained but near-degenerate ones pruned; documented as low-information in this dataset. |
 | 5 | 9 schema columns are 100% null (motor current/power/RPM, load, acoustic, belt offsets, slip ratio) | medium | Detected and dropped automatically; no feature invented on top of them. |

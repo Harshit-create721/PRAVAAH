@@ -2,8 +2,8 @@
   "model_name": "conveyor-condition-isolation-forest",
   "task": "Unsupervised conveyor condition/anomaly detection using vibration, temperature and RPM sensor fusion.",
   "not_a_classifier": "This model does not predict fault types, failure probability or remaining useful life. The dataset is unlabelled, so no such claim is supportable.",
-  "training_date_utc": "2026-09-06T20:26:54.653586+00:00",
-  "training_duration_s": 72.37,
+  "training_date_utc": "2026-09-06T22:12:11.139181+00:00",
+  "training_duration_s": 85.54,
   "environment": {
     "python": "3.14.5",
     "platform": "Windows-11-10.0.26200-SP0",

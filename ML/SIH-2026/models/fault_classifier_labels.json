@@ -77,7 +77,7 @@
   "warning": "Labels are simulated. Reported metrics measure recovery of hand-written injection recipes, not real fault detection. Do not quote them as field accuracy.",
   "split": "segment-grouped 5-fold (siblings of one real window never straddle a split)",
   "class_prior_caveat": "Generation grid produced ~50x more fault than normal windows; in service normal is >99% of traffic.",
-  "training_date_utc": "2026-09-06T20:29:14.786534+00:00",
+  "training_date_utc": "2026-09-06T22:14:52.704714+00:00",
   "environment": {
     "python": "3.14.5",
     "xgboost": "3.4.1",

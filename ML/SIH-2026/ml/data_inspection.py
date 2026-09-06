@@ -404,10 +404,13 @@ def render_markdown(rep: dict) -> str:
     L.append("| first segment above 50%% duplicated | `%s` |"
              % d["first_segment_over_50pct_duplicate_ts"])
     L.append("")
-    L.append("This is a **real defect worth fixing on the hardware side**: `seq` keeps "
-             "incrementing correctly (no gaps, no resets) while `ts_ms` stalls, so distinct "
-             "samples are being stamped with the same device time. Consequences accepted in "
-             "this pipeline:\n")
+    L.append("`seq` keeps "
+             "incrementing correctly (no gaps, no resets) while `ts_ms` repeats. "
+             "**This is expected for this rig, not a firmware bug.** `docs/dataset-schema.md` "
+             "in the PRAVAAH repo states that for the USB bridge `ts_ms` carries *laptop "
+             "arrival time*, not a device acquisition clock, so frames flushed together over "
+             "USB genuinely share one arrival timestamp. It remains a real limitation for "
+             "anything needing per-sample timing. Consequences accepted in this pipeline:\n")
     L.append("- Window-level **aggregate** statistics (mean, std, RMS, percentiles, "
              "kurtosis) stay valid -- they do not depend on intra-burst ordering.\n"
              "- Window-level **slope / rate** features are only accurate to roughly the "
@@ -568,9 +571,9 @@ def render_markdown(rep: dict) -> str:
     L.append("| 1 | No fault labels anywhere (`label = unlabelled`) | blocking for "
              "supervised work | Unsupervised anomaly detection only. No accuracy / precision "
              "/ recall / RUL is computed or claimed. |")
-    L.append("| 2 | `ts_ms` stalls; up to ~100% duplicated timestamps late in the session | "
-             "high | Aggregate features kept; slope features flagged as ~2 s resolution; "
-             "per-sample timing not used. |")
+    L.append("| 2 | `ts_ms` is USB arrival time, not an acquisition clock; up to ~100% "
+             "duplicated timestamps late in the session | high | Aggregate features kept; "
+             "slope features flagged as ~2 s resolution; per-sample timing not used. |")
     L.append("| 3 | Temperature is a monotone warm-up confounded with session time | high | "
              "Baseline fitted over the whole session; `temperature - ambient` features added; "
              "chronological split reported only as a drift diagnostic. |")

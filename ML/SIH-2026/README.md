@@ -323,11 +323,11 @@ false-alarm rate on real normal data:
 
 | deviation shape | detected (>=80% of windows) from |
 |---|---|
-| HIGH_VIBRATION | ~1.3x vibration RMS |
-| BELT_SLIP | ~2.7% speed loss with raised variability |
-| RPM_INSTABILITY | ~2x RPM standard deviation |
+| HIGH_VIBRATION | vibration x1.37 |
+| BELT_SLIP | vibration x1.09, RPM -2.7%, RPM std x1.7 |
+| RPM_INSTABILITY | vibration x1.05, RPM std x2.9 |
 | COMBINED_FAULT | mildest tested severity |
-| OVERHEATING | only at ~+5.7 degC over ambient -- **the weak channel** |
+| OVERHEATING | only at +6.5 degC over ambient -- **the weak channel** |
 
 ### A real weakness this exposed, and the fix
 
@@ -423,7 +423,7 @@ Also in `models/model_metadata.json` under `known_limitations`.
     `ml/synthetic_faults.py`, never checked against a faulted conveyor. The supervised
     classifier's metrics are circular by construction. A real fault matching none of the six
     labels will still be assigned one of them.
-13. **OVERHEATING is the weakest detection channel** -- it needs roughly +5.7 degC over
+13. **OVERHEATING is the weakest detection channel** -- it needs about +6.5 degC over
     ambient before it reliably flags, because the baseline legitimately spans a 7 degC
     warm-up. Physical, not a modelling defect.
 10. Isolation Forest, LOF and One-Class SVM agree on the broad ordering (Spearman ~0.81) but
