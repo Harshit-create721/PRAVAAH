@@ -13,7 +13,8 @@
     "bridge": "node tools/serial-bridge.js",
     "record": "node tools/record-session.js",
     "test:record": "node --test tools/record-session.test.js",
-    "demo": "./start-pravaah.sh"
+    "demo": "./start-pravaah.sh",
+    "test": "node --test server/*.test.js tools/*.test.js && cd relay && npm test"
   },
   "dependencies": {
     "@serialport/parser-readline": "^13.0.0",
