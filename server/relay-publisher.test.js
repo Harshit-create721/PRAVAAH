@@ -11,9 +11,11 @@ async function fakeRelay() {
   const wss = new WebSocketServer({ server, path: '/publish' });
   const received = [];
   let current = null;
+  let closeCount = 0;
   wss.on('connection', (ws) => {
     current = ws;
     ws.on('message', (d) => received.push(JSON.parse(d.toString())));
+    ws.on('close', () => { closeCount++; });
   });
   await new Promise((r) => server.listen(0, '127.0.0.1', r));
   return {
@@ -21,6 +23,7 @@ async function fakeRelay() {
     received,
     send: (msg) => current?.send(JSON.stringify(msg)),
     dropConnection: () => current?.close(),
+    get closeCount() { return closeCount; },
     waitFor: async (predicate, timeoutMs = 2000) => {
       const deadline = Date.now() + timeoutMs;
       while (Date.now() < deadline) {
@@ -30,17 +33,17 @@ async function fakeRelay() {
       }
       throw new Error('timed out waiting for message');
     },
-    close: () => new Promise((r) => {
-      // wss.close() with an externally-supplied `server` only waits for
-      // currently open clients to disconnect on their own - it never
-      // proactively closes them (see ws/lib/websocket-server.js `close()`).
-      // t.after() hooks run sequentially in registration order, and every
-      // test here registers this close() before the publisher's stop(), so
-      // without this, close() would deadlock forever waiting for a client
-      // that never gets told to disconnect.
-      for (const client of wss.clients) client.terminate();
-      wss.close(() => server.close(r));
-    }),
+    // Mirrors waitFor's polling style, for the one test that verifies stop()
+    // actually closes the underlying socket rather than just flipping a flag.
+    waitForClose: async (timeoutMs = 2000) => {
+      const deadline = Date.now() + timeoutMs;
+      while (Date.now() < deadline) {
+        if (closeCount > 0) return;
+        await new Promise((r) => setTimeout(r, 10));
+      }
+      throw new Error('timed out waiting for socket close');
+    },
+    close: () => new Promise((r) => { wss.close(() => server.close(r)); }),
   };
 }
 
@@ -48,11 +51,16 @@ const silent = () => {};
 
 test('publishes snapshots once connected', async (t) => {
   const relay = await fakeRelay();
-  t.after(() => relay.close());
 
   const pub = createRelayPublisher({ url: relay.url, onCommand: async () => ({}), log: silent });
   pub.start();
+  // Registered before relay.close(): the publisher must stop (and close its
+  // socket) before the relay tries to close, or relay.close() would deadlock
+  // waiting for a client that never disconnects (t.after hooks run
+  // sequentially in registration order - see the fix report for the
+  // full trace of the deadlock this ordering avoids).
   t.after(() => pub.stop());
+  t.after(() => relay.close());
 
   // Poll the connection flag rather than waiting on a message the publisher
   // never sends on connect - that would burn the full waitFor timeout.
@@ -73,7 +81,6 @@ test('send before connection is a no-op, not a crash', () => {
 
 test('executes a command and returns its result', async (t) => {
   const relay = await fakeRelay();
-  t.after(() => relay.close());
 
   const seen = [];
   const pub = createRelayPublisher({
@@ -82,6 +89,7 @@ test('executes a command and returns its result', async (t) => {
   });
   pub.start();
   t.after(() => pub.stop());
+  t.after(() => relay.close());
 
   await new Promise((r) => setTimeout(r, 100));
   relay.send({ type: 'command', id: 'x1', action: 'ack', payload: { alarmId: 5 } });
@@ -95,7 +103,6 @@ test('executes a command and returns its result', async (t) => {
 
 test('a throwing command handler produces ok:false, not a crash', async (t) => {
   const relay = await fakeRelay();
-  t.after(() => relay.close());
 
   const pub = createRelayPublisher({
     url: relay.url, log: silent,
@@ -103,6 +110,7 @@ test('a throwing command handler produces ok:false, not a crash', async (t) => {
   });
   pub.start();
   t.after(() => pub.stop());
+  t.after(() => relay.close());
 
   await new Promise((r) => setTimeout(r, 100));
   relay.send({ type: 'command', id: 'x2', action: 'close', payload: {} });
@@ -114,7 +122,6 @@ test('a throwing command handler produces ok:false, not a crash', async (t) => {
 
 test('reconnects after the relay drops the connection', async (t) => {
   const relay = await fakeRelay();
-  t.after(() => relay.close());
 
   const pub = createRelayPublisher({
     url: relay.url, onCommand: async () => ({}), log: silent,
@@ -123,6 +130,7 @@ test('reconnects after the relay drops the connection', async (t) => {
   });
   pub.start();
   t.after(() => pub.stop());
+  t.after(() => relay.close());
 
   await new Promise((r) => setTimeout(r, 100));
   assert.equal(pub.connected, true);
@@ -147,6 +155,13 @@ test('stop() prevents further reconnection', async (t) => {
   await new Promise((r) => setTimeout(r, 100));
 
   pub.stop();
+  // Verify stop() actually closes the underlying socket, not just that it
+  // flips the `connected` flag - a stop() that merely nulled out its local
+  // reference (leaving the real socket open) would previously go
+  // undetected here and could deadlock relay.close() in the tests above.
+  await relay.waitForClose();
+  assert.ok(relay.closeCount >= 1, 'stop() must close the underlying socket');
+
   relay.dropConnection();
   await new Promise((r) => setTimeout(r, 200));
   assert.equal(pub.connected, false, 'a stopped publisher must stay stopped');
