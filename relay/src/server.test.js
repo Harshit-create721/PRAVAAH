@@ -169,3 +169,21 @@ test('an unknown path is refused rather than upgraded', async (t) => {
   const [code] = await once(ws, 'close');
   assert.ok(code, 'unknown upgrade paths must not become subscribers');
 });
+
+test('listen defaults to loopback (127.0.0.1) for safety', async (t) => {
+  const relay = createRelayServer();
+  await relay.listen(0);
+  t.after(() => relay.close());
+
+  const addr = relay.server.address();
+  assert.equal(addr.address, '127.0.0.1', 'default bind must be loopback only');
+});
+
+test('listen accepts a host override', async (t) => {
+  const relay = createRelayServer();
+  await relay.listen(0, '0.0.0.0');
+  t.after(() => relay.close());
+
+  const addr = relay.server.address();
+  assert.equal(addr.address, '0.0.0.0', 'host parameter must be respected');
+});
