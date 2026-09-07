@@ -1,7 +1,11 @@
 # PRAVAAH mobile app — design
 
 **Date:** 2026-09-06
-**Status:** approved design, not yet implemented
+**Status:** implemented in `mobile/`; physical-device background-delivery acceptance pending
+
+See [the mobile implementation guide](../../../mobile/README.md) for the
+verified wire contract, run commands, implementation differences and remaining
+device checks. This document preserves the original design intent.
 **Context:** SIH26008 — AI-enabled conveyor belt joint rupture and damage prediction
 
 ## 1. Goal

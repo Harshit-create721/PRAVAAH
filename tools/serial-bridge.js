@@ -25,6 +25,7 @@ import { ReadlineParser } from '@serialport/parser-readline';
 import mqtt from 'mqtt';
 import config from '../server/config.js';
 import { TOPICS } from '../server/schema.js';
+import { SensorPorts } from './lib/serial-ports.js';
 
 const args = process.argv.slice(2);
 const flag = (name, dflt = null) => {
@@ -49,10 +50,6 @@ const BAUD = Number(flag('baud', 115200));
 const ONLY_PORT = flag('port', null);
 const SITE = config.site;
 
-// Matches the CP2102/CH340 bridges on ESP32 devkits. Deliberately narrow:
-// /dev/cu.Bluetooth-Incoming-Port and friends must never be opened.
-const PORT_RE = /usbserial|usbmodem|SLAB_USBtoUART|wchusb/i;
-
 const topicTelemetry = TOPICS.telemetry(SITE, CONVEYOR);
 const topicJoint = TOPICS.jointEvent(SITE, CONVEYOR);
 const topicStatus = (node) => `beltguard/${SITE}/${CONVEYOR}/node/${node}/status`;
@@ -65,67 +62,34 @@ const client = mqtt.connect(config.mqtt.url, { clientId: `serial-bridge-${proces
 
 client.on('error', (e) => console.error('  mqtt error:', e.message));
 
-client.on('connect', async () => {
+const portManager = new SensorPorts({
+  list: () => SerialPort.list(),
+  create: (path) => new SerialPort({ path, baudRate: BAUD, autoOpen: false }),
+  onlyPort: ONLY_PORT,
+  silenceMs: PORT_SILENCE_MS,
+  log: (message) => console.log(`  ${message}`),
+  onPort: (path, port, current) => {
+    const parser = port.pipe(new ReadlineParser({ delimiter: '\n' }));
+    parser.on('data', (line) => { if (current()) handleLine(path, line.trim()); });
+  },
+});
+let started = false;
+const timers = [];
+client.on('connect', () => {
   console.log(`\n  PRAVAAH serial bridge`);
   console.log(`  broker    ${config.mqtt.url}`);
   console.log(`  conveyor  ${CONVEYOR}`);
   console.log(`  topics    ${topicTelemetry}`);
   console.log(`            ${topicJoint}\n`);
-
-  const ports = ONLY_PORT ? [{ path: ONLY_PORT }] : (await SerialPort.list()).filter((p) => PORT_RE.test(p.path));
-
-  if (!ports.length) {
-    console.error('  no USB serial ports found. Is anything plugged in?');
-    process.exit(1);
-  }
-
-  console.log(`  found ${ports.length} port(s):`);
-  for (const p of ports) console.log(`    ${p.path}`);
-  console.log('');
-
-  for (const p of ports) openPort(p.path);
-  setInterval(report, 5000);
-  setInterval(heartbeat, HEARTBEAT_MS);
+  // A broker reconnect must not create a second owner/retry loop for each port.
+  if (started) return;
+  started = true;
+  console.log('  Watching USB sensor ports; new/reconnected devices are discovered every 2s.');
+  portManager.scan();
+  timers.push(setInterval(() => portManager.scan(), 2000));
+  timers.push(setInterval(report, 5000));
+  timers.push(setInterval(heartbeat, HEARTBEAT_MS));
 });
-
-function openPort(path) {
-  // Guard against double-scheduling: a failed open can raise both the callback
-  // error and 'close', and two timers would then open the port twice.
-  let scheduled = false;
-  const retry = (why) => {
-    if (scheduled) return;
-    scheduled = true;
-    console.log(`  ${short(path)}: ${why}, retrying in 2s`);
-    setTimeout(() => openPort(path), 2000);
-  };
-
-  const port = new SerialPort({ path, baudRate: BAUD }, (err) => {
-    // An open that fails never emits 'close', so without this a port that was
-    // briefly locked (a previous bridge still exiting) would stay dead for the
-    // whole run.
-    if (err) retry(err.message);
-  });
-
-  // Reopening is what makes a mid-demo unplug survivable: the node reboots,
-  // the port reappears, and frames resume without restarting the bridge.
-  port.on('close', () => retry('closed'));
-  port.on('error', (e) => retry(e.message));
-
-  let lastData = Date.now();
-  port.on('data', () => { lastData = Date.now(); });
-
-  const watchdog = setInterval(() => {
-    if (Date.now() - lastData < PORT_SILENCE_MS) return;
-    clearInterval(watchdog);
-    console.log(`  ${short(path)}: silent for ${PORT_SILENCE_MS / 1000}s, forcing reopen`);
-    // close() emits 'close', which routes into the same retry as an unplug.
-    try { port.close(() => {}); } catch { retry('silent'); }
-  }, 2000);
-  port.on('close', () => clearInterval(watchdog));
-
-  const parser = port.pipe(new ReadlineParser({ delimiter: '\n' }));
-  parser.on('data', (line) => handleLine(path, line.trim()));
-}
 
 function handleLine(path, line) {
   if (!line) return;
@@ -215,6 +179,8 @@ function report() {
 
 for (const sig of ['SIGINT', 'SIGTERM']) {
   process.on(sig, () => {
+    for (const timer of timers) clearInterval(timer);
+    portManager.stop();
     for (const node of nodes.keys()) publishStatus(node, false);
     console.log('\n  bridge stopped');
     setTimeout(() => process.exit(0), 150);

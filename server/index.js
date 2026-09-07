@@ -19,6 +19,7 @@ import { evaluateJointPass, evaluateTelemetry, inferOperatingState, worse } from
 import { componentStatus } from './components.js';
 import { createRelayPublisher } from './relay-publisher.js';
 import { applySensorHealth } from './sensor-health.js';
+import { createMLWorker } from './ml-worker.js';
 
 const ROOT = resolve(import.meta.dirname, '..');
 const WEB = join(ROOT, 'web');
@@ -85,6 +86,9 @@ try {
 }
 
 const nodeSeen = new Map(); // nodeId -> { ts, conveyor, meta }
+const mlWorkers = new Map(config.conveyors.map(c => [c.id,
+  createMLWorker({ root: ROOT, conveyor: c.id })]));
+for (const worker of mlWorkers.values()) worker.start();
 
 function freshness(ts) {
   if (!Number.isFinite(ts)) return 'never';
@@ -129,6 +133,9 @@ function liveValues(cv) {
 }
 
 function onTelemetry(cv, payload, raw) {
+  // Preserve raw health/diagnostics for model validation, including bad frames
+  // that must clear its window. Do not feed a merged or forward-filled snapshot.
+  mlWorkers.get(cv.id)?.push(payload);
   const r = validate(payload, CHANNELS);
   for (const rej of r.rejected) {
     store.reject('telemetry', `${rej.key}=${rej.val}: ${rej.why}`, raw);
@@ -304,6 +311,12 @@ function handleMessage(topic, buf) {
   let payload;
   try { payload = JSON.parse(raw); }
   catch { store.reject(topic, 'payload is not valid JSON', raw); cv.counters.rejects++; return; }
+  if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
+    store.reject(topic, 'payload must be a JSON object', raw);
+    cv.counters.rejects++;
+    if (parts.kind === 'telemetry') mlWorkers.get(cv.id)?.invalidate('Invalid telemetry payload');
+    return;
+  }
 
   switch (parts.kind) {
     case 'telemetry': onTelemetry(cv, payload, raw); break;
@@ -315,7 +328,12 @@ function handleMessage(topic, buf) {
       if (parts.rest[1] === 'status' && nodeId) {
         const online = payload.online !== false && payload.status !== 'offline';
         if (online) touchNode(nodeId, cv.id, payload);
-        else { nodeSeen.delete(nodeId); store.nodeStatus(nodeId, cv.id, false, {}); }
+        else {
+          nodeSeen.delete(nodeId); store.nodeStatus(nodeId, cv.id, false, {});
+          if (['esp32-vibration-01', 'esp32-thermal-01', 'esp32-marker-01'].includes(nodeId)) {
+            mlWorkers.get(cv.id)?.invalidate(`Sensor disconnected: ${nodeId}`);
+          }
+        }
       }
       break;
     }
@@ -408,6 +426,7 @@ function snapshot() {
         operating_state: cv.operating_state,
         risk: cv.risk, riskSource: cv.riskSource,
         analysis: cv.analysis,
+        ml: mlWorkers.get(cv.id)?.snapshot() ?? null,
         sensorHealth: cv.sensorHealth ?? null,
         hallDiagnostics: cv.hallDiagnostics ?? null,
         telemetrySkipped: cv.telemetrySkipped ?? [],
@@ -643,6 +662,7 @@ server.listen(config.http.port, config.http.host, () => {
 for (const sig of ['SIGINT', 'SIGTERM']) {
   process.on(sig, () => {
     console.log('\nshutting down');
+    for (const worker of mlWorkers.values()) worker.stop();
     try { client.end(true); } catch {}
     try { broker?.close(); } catch {}
     try { store.close(); } catch {}

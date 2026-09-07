@@ -10,15 +10,15 @@ Model: **IsolationForest** on **225 windows** / **59 features**.
 
 | percentile of anomaly_score | anomaly_score | health_score of that window |
 |---|---|---|
-| min | 2.87 | 97.13 |
-| p25 | 6.40 | 93.60 |
-| median | 8.82 | 91.18 |
-| mean | 14.95 | 85.05 |
-| p75 | 17.12 | 82.88 |
-| p90 | 34.93 | 65.07 |
-| p95 | 43.50 | 56.50 |
-| p99 | 73.23 | 26.77 |
-| max | 99.33 | 0.67 |
+| min | 3.24 | 96.76 |
+| p25 | 6.15 | 93.85 |
+| median | 8.45 | 91.55 |
+| mean | 14.78 | 85.22 |
+| p75 | 16.44 | 83.56 |
+| p90 | 33.91 | 66.09 |
+| p95 | 46.91 | 53.09 |
+| p99 | 81.41 | 18.59 |
+| max | 99.79 | 0.21 |
 
 Status mix across the 225 baseline windows:
 
@@ -35,9 +35,9 @@ This mix is *by construction*: the thresholds were derived from these very perce
 
 | status boundary | score | derived from | realised baseline exceedance |
 |---|---|---|---|
-| >= WATCH | 34.9 | baseline anomaly-score p90 | 10.2% |
-| >= WARNING | 60.6 | baseline anomaly-score p98 (floored at watch + 2) | 2.2% |
-| >= CRITICAL | 91.7 | baseline anomaly-score p99.5 (floored at warning + 2) | 0.9% |
+| >= WATCH | 33.9 | baseline anomaly-score p90 | 10.2% |
+| >= WARNING | 62.2 | baseline anomaly-score p98 (floored at watch + 2) | 2.2% |
+| >= CRITICAL | 93.7 | baseline anomaly-score p99.5 (floored at warning + 2) | 0.9% |
 
 *PROTOTYPE THRESHOLDS. Derived from one unlabelled recording of one conveyor. They are not industrial safety limits, not certified trip points, and carry no guarantee of detecting any particular fault. Edit models/thresholds.json to retune without retraining.*
 
@@ -45,8 +45,8 @@ This mix is *by construction*: the thresholds were derived from these very perce
 
 ```
 raw   = -IsolationForest.decision_function(x)      (higher = more unusual)
-z     = (raw - -0.077047) / 0.019801
-score = 100 / (1 + exp(-(z - 4.8306) / 1.6406))
+z     = (raw - -0.081487) / 0.020658
+score = 100 / (1 + exp(-(z - 4.6163) / 1.5678))
 ```
 
 Anchors: the baseline median maps to ~5, the baseline 99th percentile maps to 50. **A score of 50 therefore means 'as unusual as the most unusual 1% of the baseline' -- it does not mean a 50% chance of anything.**
@@ -57,17 +57,19 @@ Fit on 4/5 of the *segments*, score the held-out fifth. Windows from one segment
 
 | fold | train windows | held-out windows | held-out segments | train median score | held-out median score | train %>=WATCH | held-out %>=WATCH |
 |---|---|---|---|---|---|---|---|
-| 0 | 180 | 45 | 6 | 5.00 | 10.65 | 10.0% | 28.9% |
-| 1 | 180 | 45 | 7 | 5.00 | 5.03 | 10.0% | 2.2% |
-| 2 | 180 | 45 | 8 | 5.00 | 8.39 | 10.0% | 28.9% |
-| 3 | 180 | 45 | 8 | 5.00 | 10.66 | 10.0% | 4.4% |
-| 4 | 180 | 45 | 8 | 5.00 | 5.41 | 10.0% | 6.7% |
+| 0 | 180 | 45 | 6 | 5.00 | 10.53 | 10.0% | 35.6% |
+| 1 | 180 | 45 | 7 | 5.00 | 4.87 | 10.0% | 2.2% |
+| 2 | 180 | 45 | 8 | 5.00 | 8.79 | 10.0% | 37.8% |
+| 3 | 180 | 45 | 8 | 5.00 | 10.81 | 10.0% | 17.8% |
+| 4 | 180 | 45 | 8 | 5.00 | 5.43 | 10.0% | 6.7% |
 
-Mean |held-out - train| WATCH-rate gap: **10.9 percentage points**; the held-out WATCH rate ranges from **2.2% to 28.9%** against a 10.0% in-fit rate.
+Mean |held-out - train| WATCH-rate gap: **14.5 percentage points**; the held-out WATCH rate ranges from **2.2% to 37.8%** against a 10.0% in-fit rate.
 
 > **This gap is large, and it is the most important negative result in this report.** The boundary does not transfer cleanly to segments the model has not seen: depending on which segments are held out, the alert rate on unseen data is anywhere from a third of the in-fit rate to roughly three times it. With 225 windows drawn from only 37 segments, between-segment variation dominates -- each fold removes a handful of segments that carry a meaningful share of the whole recording's behaviour. Practical consequence: **the WATCH threshold should be expected to produce an alert rate somewhere in the range above, not a stable 10%, until far more segments are recorded.** It also means the prototype thresholds are the least trustworthy part of this system.
 
 Either way this says nothing about whether those segments were mechanically healthy -- only about how consistently the model scores them.
+
+The grouped and chronological diagnostics below fit feature selection, scaling, the joint forest, calibration and thresholds on each training partition only. They probe the joint detector, not the full deployed ensemble, and do not provide independent field-validation estimates.
 
 ## 5. Chronological drift diagnostic
 
@@ -80,10 +82,10 @@ Either way this says nothing about whether those segments were mechanically heal
 | session time covered | 0-1961 s | 2005-2406 s |
 | mean temperature | 34.09 degC | 36.62 degC |
 | mean vibration RMS | 0.06703 g | 0.06715 g |
-| median anomaly score | 5.00 | 16.80 |
-| %>=WATCH | 10.2% | 35.4% |
+| median anomaly score | 5.00 | 15.14 |
+| %>=WATCH | 10.2% | 37.5% |
 
-Later-window status mix under the earlier-only model: NORMAL 31, WATCH 13, WARNING 3, CRITICAL 1
+Later-window status mix under the earlier-only model: NORMAL 30, WATCH 13, WARNING 4, CRITICAL 1
 
 > **Read this as drift, not as skill.** The evaluation half is on average 2.53 degC hotter than the training half purely because the machine was warming up, while mean vibration barely moves (0.06703 -> 0.06715 g). A model fitted only on cold windows will therefore call hot windows unusual for a thermal reason. This is exactly why the *deployed* model in `models/isolation_forest.joblib` is fitted over the whole session.
 
@@ -120,11 +122,11 @@ Isolation Forest is the primary model. LOF and One-Class SVM are shown only to c
 
 | model | Spearman vs Isolation Forest | shared windows in top-10 |
 |---|---|---|
-| LocalOutlierFactor(n_neighbors=20, novelty=True) | 0.798 | 2/10 |
-| OneClassSVM(rbf, nu=0.05, gamma=scale) | 0.816 | 2/10 |
-| OneClassSVM(rbf, nu=0.02, gamma=scale) | 0.815 | 3/10 |
+| LocalOutlierFactor(n_neighbors=20, novelty=True) | 0.813 | 3/10 |
+| OneClassSVM(rbf, nu=0.05, gamma=scale) | 0.796 | 3/10 |
+| OneClassSVM(rbf, nu=0.02, gamma=scale) | 0.796 | 4/10 |
 
-**The global agreement is moderate but the tail agreement is poor.** Spearman sits around 0.81 across all 225 windows, yet the three detectors share only 2-3 of their top-10 most-unusual windows. The tail is precisely what an alert threshold acts on, so this is the honest reading: *which* windows get flagged as the worst offenders is substantially model-dependent, and no labelled data exists to say which detector is right. Treat any individual CRITICAL window as a prompt to inspect, not as a verdict.
+**The global agreement is moderate but the tail agreement is poor.** Spearman sits around 0.80 across all 225 windows, yet the three detectors share only 3-4 of their top-10 most-unusual windows. The tail is precisely what an alert threshold acts on, so this is the honest reading: *which* windows get flagged as the worst offenders is substantially model-dependent, and no labelled data exists to say which detector is right. Treat any individual CRITICAL window as a prompt to inspect, not as a verdict.
 
 Isolation Forest is kept as primary anyway, on engineering grounds rather than measured superiority: it needs no distance metric over 59 heterogeneous features, trains and scores fast enough to run on an edge gateway, exposes a smooth `decision_function` suitable for the 0-100 mapping, and does not need the whole training set kept in memory at inference time the way LOF does.
 
@@ -132,24 +134,24 @@ Isolation Forest is kept as primary anyway, on engineering grounds rather than m
 
 | rank | window | segment | session time | score | status | temp | RPM | vib RMS | leading deviation |
 |---|---|---|---|---|---|---|---|---|---|
-| 1 | 186 | S054 | 2093 s | 99.3 | CRITICAL | 36.54 degC | 20.52 | 0.0694 g | `vib_kurt_sensor_std` (z=+147.1) |
-| 2 | 13 | S003 | 341 s | 94.1 | CRITICAL | 32.74 degC | 20.50 | 0.0685 g | `vib_kurt_sensor_std` (z=+20.9) |
-| 3 | 212 | S071 | 2332 s | 73.9 | WARNING | 36.52 degC | 20.56 | 0.0680 g | `temp_slope_per_s` (z=-5.0) |
-| 4 | 96 | S014 | 740 s | 71.0 | WARNING | 34.05 degC | 20.57 | 0.0717 g | `rpm_max` (z=+4.0) |
-| 5 | 5 | S001 | 12 s | 62.8 | WARNING | 31.19 degC | 20.45 | 0.0612 g | `rpm_min` (z=-3.0) |
-| 6 | 97 | S014 | 743 s | 58.2 | WATCH | 34.02 degC | 20.56 | 0.0712 g | `rpm_range` (z=+4.4) |
-| 7 | 12 | S002 | 48 s | 53.7 | WATCH | 31.62 degC | 20.46 | 0.0615 g | `vib_crest_sensor_range` (z=+4.6) |
-| 8 | 7 | S002 | 36 s | 52.0 | WATCH | 31.53 degC | 20.46 | 0.0639 g | `rpm_min` (z=-3.4) |
-| 9 | 153 | S030 | 1703 s | 50.7 | WATCH | 36.26 degC | 20.55 | 0.0660 g | `ambient_slope_per_s` (z=+3.8) |
-| 10 | 210 | S071 | 2327 s | 47.9 | WATCH | 36.95 degC | 20.54 | 0.0679 g | `acceleration_y_min` (z=-3.4) |
+| 1 | 186 | S054 | 2093 s | 99.8 | CRITICAL | 36.54 degC | 20.52 | 0.0694 g | `vib_kurt_sensor_std` (z=+147.1) |
+| 2 | 13 | S003 | 341 s | 95.0 | CRITICAL | 32.74 degC | 20.50 | 0.0685 g | `vib_kurt_sensor_std` (z=+20.9) |
+| 3 | 212 | S071 | 2332 s | 84.2 | WARNING | 36.52 degC | 20.56 | 0.0680 g | `temp_slope_per_s` (z=-5.0) |
+| 4 | 96 | S014 | 740 s | 72.7 | WARNING | 34.05 degC | 20.57 | 0.0717 g | `rpm_max` (z=+4.0) |
+| 5 | 5 | S001 | 12 s | 65.2 | WARNING | 31.19 degC | 20.45 | 0.0612 g | `rpm_min` (z=-3.0) |
+| 6 | 97 | S014 | 743 s | 59.1 | WATCH | 34.02 degC | 20.56 | 0.0712 g | `rpm_range` (z=+4.4) |
+| 7 | 7 | S002 | 36 s | 54.2 | WATCH | 31.53 degC | 20.46 | 0.0639 g | `rpm_min` (z=-3.4) |
+| 8 | 12 | S002 | 48 s | 52.9 | WATCH | 31.62 degC | 20.46 | 0.0615 g | `vib_crest_sensor_range` (z=+4.6) |
+| 9 | 185 | S053 | 2081 s | 51.7 | WATCH | 36.48 degC | 20.48 | 0.0661 g | `acceleration_x_mean` (z=+12.8) |
+| 10 | 203 | S071 | 2309 s | 50.1 | WATCH | 37.07 degC | 20.54 | 0.0670 g | `acceleration_z_range` (z=+3.9) |
 
 Example explanations produced by the system for these windows:
 
-- **window 186 (CRITICAL, 99.3)** -- Vibration crest factor peaked above the baseline; the spread between minimum and maximum vibration is unusually wide; peak vibration in the window is above the learned baseline; and vibration is fluctuating more than the baseline. Possible mechanical or thermal abnormality -- inspect before drawing a conclusion. This is a statistical deviation from the learned baseline, not a diagnosed fault.
+- **window 186 (CRITICAL, 99.8)** -- Vibration crest factor peaked above the baseline; the spread between minimum and maximum vibration is unusually wide; peak vibration in the window is above the learned baseline; and vibration is fluctuating more than the baseline. Possible mechanical or thermal abnormality -- inspect before drawing a conclusion. This is a statistical deviation from the learned baseline, not a diagnosed fault.
 
-- **window 13 (CRITICAL, 94.1)** -- Vibration crest factor peaked above the baseline; the spread between minimum and maximum vibration is unusually wide; peak vibration in the window is above the learned baseline; and vibration is fluctuating more than the baseline. Possible mechanical or thermal abnormality -- inspect before drawing a conclusion. This is a statistical deviation from the learned baseline, not a diagnosed fault.
+- **window 13 (CRITICAL, 95.0)** -- Vibration crest factor peaked above the baseline; the spread between minimum and maximum vibration is unusually wide; peak vibration in the window is above the learned baseline; and vibration is fluctuating more than the baseline. Possible mechanical or thermal abnormality -- inspect before drawing a conclusion. This is a statistical deviation from the learned baseline, not a diagnosed fault.
 
-- **window 212 (WARNING, 73.9)** -- Multiple sensor indicators changed simultaneously: Temperature swung more within the window than the baseline. Possible mechanical or thermal abnormality -- inspect before drawing a conclusion. This is a statistical deviation from the learned baseline, not a diagnosed fault.
+- **window 212 (WARNING, 84.2)** -- Multiple sensor indicators changed simultaneously: Temperature swung more within the window than the baseline. Possible mechanical or thermal abnormality -- inspect before drawing a conclusion. This is a statistical deviation from the learned baseline, not a diagnosed fault.
 
 **The physical cause of these windows is unknown.** They are statistical deviations from the learned baseline. No bearing fault, belt slip or any other mechanical diagnosis is claimed or implied.
 
@@ -161,7 +163,7 @@ Example explanations produced by the system for these windows:
 
 - The score mapping is monotone, bounded to 0-100, and calibrated to documented baseline quantiles.
 
-- Three different unsupervised detectors agree on the broad ordering (Spearman ~0.81), so the ranking is not an artefact of one algorithm.
+- Three different unsupervised detectors agree on the broad ordering (Spearman ~0.80), so the ranking is not an artefact of one algorithm.
 
 - Training-time and inference-time features match: `ml/predict.py --self-test` recomputed 225 windows through the streaming path and the maximum absolute feature difference against `outputs/features.csv` was **7.11e-15** across 59 features.
 

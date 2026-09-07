@@ -729,3 +729,11 @@ a:hover { color: #f0bb69; }
   font-weight: 600;
 }
 .sch-readout.nosig { fill: #4a4640; font-weight: 400; letter-spacing: 0.09em; }
+
+/* Learned condition is separate from measured channels and maintenance rules. */
+.ml-condition { padding: 16px 20px; border-top: 1px solid var(--line); }
+.ml-condition h3 { display: flex; flex-wrap: wrap; gap: 8px; justify-content: space-between; margin: 0 0 10px; font-size: 14px; }
+.ml-reading { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 8px; }
+#mlScore { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+.ml-condition p { margin: 8px 0 0; color: var(--dim); font-size: 12px; }
+.ml-condition .ml-note { font-size: 11px; }

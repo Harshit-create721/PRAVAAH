@@ -28,6 +28,7 @@ const GROUP_TITLE = {
 const DERIVED = new Set(['slip_ratio', 'temperature_delta']);
 
 let snap = null;
+let snapshotReceivedAt = 0;
 let activeConveyor = null;
 let openJoint = null;
 
@@ -82,7 +83,7 @@ function connect() {
   ws.onmessage = (ev) => {
     let msg;
     try { msg = JSON.parse(ev.data); } catch { return; }
-    if (msg.type === 'snapshot') { snap = msg; render(); }
+    if (msg.type === 'snapshot') { snap = msg; snapshotReceivedAt = Date.now(); render(); }
   };
 }
 
@@ -92,6 +93,24 @@ function setLink(up) {
 }
 
 // ---------------------------------------------------------------- render
+
+const ML_STATUS = { NORMAL: 'Within baseline range', WATCH: 'Baseline deviation',
+  WARNING: 'High baseline deviation', CRITICAL: 'Very high baseline deviation' };
+function renderML(cv) {
+  const ml = cv.ml;
+  const gatewayNow = snap.server.now + Date.now() - snapshotReceivedAt;
+  const fresh = ws?.readyState === WebSocket.OPEN && ml?.type === 'condition'
+    && ml.data_quality === 'valid' && Number.isFinite(ml.end_ms)
+    && gatewayNow - ml.end_ms <= 5000 && gatewayNow >= ml.end_ms - 1000;
+  $('mlStatus').textContent = fresh ? (ML_STATUS[ml.status] ?? 'Baseline deviation')
+    : ml?.status === 'WARMING_UP' && ws?.readyState === WebSocket.OPEN ? 'Collecting a full window' : 'Data unavailable';
+  $('mlScore').textContent = fresh && Number.isFinite(ml.anomaly_score) ? `${ml.anomaly_score.toFixed(1)} / 100` : '';
+  $('mlDetail').textContent = fresh
+    ? `${ml.window_seconds}s window · ${ml.driver_sensor} contributed most. ${ml.explanation ?? ''}`
+    : ws?.readyState !== WebSocket.OPEN ? 'Gateway connection interrupted.'
+      : ml?.type === 'condition' ? 'Waiting for fresh readings from all three sensors.'
+        : (ml?.reason ?? 'The ML service is unavailable.');
+}
 
 function currentConveyor() {
   if (!snap?.conveyors?.length) return null;
@@ -113,6 +132,7 @@ function render() {
 
   renderBanner(cv);
   renderRisk(cv);
+  renderML(cv);
   renderSchematic(cv);
   renderComponents(cv);
   renderChannels(cv);

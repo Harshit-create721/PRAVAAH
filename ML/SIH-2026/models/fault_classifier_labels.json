@@ -75,35 +75,35 @@
   },
   "trained_on": "SYNTHETIC labels from ml/synthetic_faults.py",
   "warning": "Labels are simulated. Reported metrics measure recovery of hand-written injection recipes, not real fault detection. Do not quote them as field accuracy.",
-  "split": "segment-grouped 5-fold (siblings of one real window never straddle a split)",
-  "class_prior_caveat": "Generation grid produced ~50x more fault than normal windows; in service normal is >99% of traffic.",
-  "training_date_utc": "2026-09-06T22:14:52.704714+00:00",
+  "split": "segment-grouped 5-fold with fold-local feature selection and class weights (siblings never straddle a split)",
+  "class_prior_caveat": "Generation grid produced ~50x more fault than normal windows; the real in-service class distribution is unknown.",
+  "training_date_utc": "2026-09-07T07:00:18.588829+00:00",
   "environment": {
-    "python": "3.14.5",
+    "python": "3.14.6",
     "xgboost": "3.4.1",
     "scikit_learn": "1.9.0"
   },
   "cv_macro_f1": {
     "RandomForest": {
-      "mean": 0.9657902256417217,
-      "std": 0.021528103342450797,
+      "mean": 0.9630990929442612,
+      "std": 0.021318381299768173,
       "folds": [
-        0.9558301425337302,
-        0.9779130094283378,
-        0.931727625480108,
-        0.9675615206148911,
+        0.9562092183320526,
+        0.9771635307325321,
+        0.9344364669489199,
+        0.95176741855626,
         0.9959188301515414
       ]
     },
     "XGBoost": {
-      "mean": 0.9729297181245891,
-      "std": 0.0181479214904153,
+      "mean": 0.9677453702020955,
+      "std": 0.020705763736196033,
       "folds": [
-        0.9736090455878692,
-        0.9774822937456832,
-        0.9420828505408264,
-        0.9725851017082796,
-        0.9988892990402869
+        0.9714821236040966,
+        0.9778490104648974,
+        0.943341128553469,
+        0.9467953295860032,
+        0.9992592588020113
       ]
     }
   }

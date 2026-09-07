@@ -54,7 +54,9 @@ def prune_features(df: pd.DataFrame, candidates: list) -> tuple:
     keep = [c for c, s in zip(candidates, std) if s > C.NEAR_ZERO_VARIANCE_STD]
     report["dropped_zero_variance"] = [c for c in candidates if c not in keep]
 
-    corr = np.corrcoef(df[keep].to_numpy(float), rowvar=False)
+    if not keep:
+        raise ValueError("no varying features in fit partition")
+    corr = np.atleast_2d(np.corrcoef(df[keep].to_numpy(float), rowvar=False))
     corr = np.nan_to_num(corr, nan=0.0)
     final, dropped = [], {}
     for i, name in enumerate(keep):
@@ -70,6 +72,14 @@ def prune_features(df: pd.DataFrame, candidates: list) -> tuple:
                              "abs_corr": round(float(abs(corr[i, keep.index(red)])), 6)}
     report["dropped_redundant"] = dropped
     return final, report
+
+
+def fit_fold_preprocessor(train_frames, heldout_frames, candidates):
+    """All learned selection/scaling is fitted on the training partition only."""
+    names, _ = prune_features(train_frames, candidates)
+    scaler = RobustScaler().fit(train_frames[names].to_numpy(float))
+    return (scaler.transform(train_frames[names].to_numpy(float)),
+            scaler.transform(heldout_frames[names].to_numpy(float)), names)
 
 
 # --------------------------------------------------------------------------------------
@@ -124,7 +134,7 @@ def screen_baseline(X: np.ndarray, feature_names: list, quantile: float = 0.995)
 # --------------------------------------------------------------------------------------
 # Parameter sweep
 # --------------------------------------------------------------------------------------
-def sweep_parameters(X_fit: np.ndarray, groups: np.ndarray) -> list:
+def sweep_parameters(frames: pd.DataFrame, candidates: list, groups: np.ndarray) -> list:
     """Compare Isolation Forest settings on *held-out segments*, not on the fit data.
 
     Without labels there is no accuracy to optimise, so the criterion is stability:
@@ -142,6 +152,10 @@ def sweep_parameters(X_fit: np.ndarray, groups: np.ndarray) -> list:
     n_splits = min(5, len(uniq))
     gkf = GroupKFold(n_splits=n_splits)
 
+    # Cache independently fitted transforms, never transform held-out data with
+    # a selector/scaler learned from the full recording.
+    partitions = [fit_fold_preprocessor(frames.iloc[tr], frames.iloc[te], candidates)
+                  for tr, te in gkf.split(frames, groups=groups)]
     grid = []
     for n_est in (100, 300, 600):
         for max_samples in ("auto", 64, 128):
@@ -152,14 +166,14 @@ def sweep_parameters(X_fit: np.ndarray, groups: np.ndarray) -> list:
     results = []
     for params in grid:
         gaps, rhos = [], []
-        for tr, te in gkf.split(X_fit, groups=groups):
-            m1 = IsolationForest(random_state=C.RANDOM_STATE, n_jobs=-1, **params).fit(X_fit[tr])
-            m2 = IsolationForest(random_state=C.RANDOM_STATE + 7, n_jobs=-1, **params).fit(X_fit[tr])
-            in_rate = float((m1.predict(X_fit[tr]) == -1).mean())
-            out_rate = float((m1.predict(X_fit[te]) == -1).mean())
+        for X_tr, X_te, _ in partitions:
+            m1 = IsolationForest(random_state=C.RANDOM_STATE, n_jobs=-1, **params).fit(X_tr)
+            m2 = IsolationForest(random_state=C.RANDOM_STATE + 7, n_jobs=-1, **params).fit(X_tr)
+            in_rate = float((m1.predict(X_tr) == -1).mean())
+            out_rate = float((m1.predict(X_te) == -1).mean())
             gaps.append(abs(out_rate - in_rate))
-            s1 = m1.decision_function(X_fit[te])
-            s2 = m2.decision_function(X_fit[te])
+            s1 = m1.decision_function(X_te)
+            s2 = m2.decision_function(X_te)
             if len(s1) > 2 and np.std(s1) > 0 and np.std(s2) > 0:
                 rhos.append(float(spearmanr(s1, s2).statistic))
         results.append({
@@ -222,7 +236,7 @@ def main(argv=None) -> dict:
     chosen = dict(C.IF_PARAMS)
     if not args.no_sweep:
         print("[5/7] parameter stability sweep (segment-grouped folds) ...")
-        sweep = sweep_parameters(X, feats.segment_id.to_numpy())
+        sweep = sweep_parameters(feats, candidates, feats.segment_id.to_numpy())
         best = sweep[0]["params"]
         print("      best-by-stability: %s (spearman %.3f, rate gap %.3f)"
               % (best, sweep[0]["seed_rank_stability_spearman"],
@@ -275,7 +289,7 @@ def main(argv=None) -> dict:
     joblib.dump(sub_models, os.path.join(C.MODELS_DIR, "sensor_detectors.joblib"))
 
     feature_config = {
-        "schema_version": 1,
+        "schema_version": 2,
         "feature_names": selected,
         "feature_order": selected,
         "n_features": len(selected),
@@ -284,6 +298,14 @@ def main(argv=None) -> dict:
         "min_frames_per_sensor": C.MIN_FRAMES_PER_SENSOR,
         "min_time_coverage": C.MIN_TIME_COVERAGE,
         "required_sensors": C.REQUIRED_SENSORS,
+        "input_validation": {
+            "sensor_health_required": True, "max_sensor_gap_ms": 5000,
+            "timestamp_aliases": ["ts_ms", "ts"],
+            "timestamp_meaning": "laptop USB-bridge arrival, integer milliseconds",
+            "invalid_input_action": "clear all sensor buffers; data unavailable; warm up again",
+            "window_interval": "[start_ms, end_ms), emitted on all-sensor watermark",
+            "sequence_discontinuity_action": "restart synchronized window",
+        },
         "required_input_columns": {
             "vibration": ["ts_ms", "vibration_rms", "vibration_kurtosis", "vibration_crest",
                           "acceleration_x", "acceleration_y", "acceleration_z",
@@ -365,6 +387,7 @@ def main(argv=None) -> dict:
             "segments_total": int(len(pre.segments)),
             "segments_yielding_windows": int(feats.segment_id.nunique()),
             "retained_seconds": round(float(pre.segments.duration_s.sum()), 3),
+            "verified_sha256": __import__("data_contract").verify_recording(C.resolve_telemetry_path()),
         },
         "windows": {
             "n_windows": int(len(feats)),
@@ -388,7 +411,7 @@ def main(argv=None) -> dict:
             "parameters": {k: (v if not isinstance(v, np.generic) else v.item())
                            for k, v in chosen.items()},
             "config_defaults": C.IF_PARAMS,
-            "parameter_selection": ("segment-grouped 5-fold stability sweep; see "
+            "parameter_selection": ("segment-grouped 5-fold stability sweep with fold-local selection/scaling; see "
                                     "parameter_sweep_top below"
                                     if sweep else "config defaults (sweep skipped)"),
             "parameter_sweep_top": sweep[:5],

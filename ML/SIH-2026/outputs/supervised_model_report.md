@@ -4,39 +4,39 @@
 
 Two specific reasons the headline figure is optimistic:
 
-1. **The class prior is fictional.** The generation grid made ~50x more fault windows than normal ones. In service normal is >99% of traffic, so real precision on the fault classes would be far lower.
+1. **The class prior is fictional.** The generation grid made ~50x more fault windows than unchanged baseline ones. The real deployment class prior is unknown; precision under that prior has not been measured.
 2. **Only invented deviation shapes are present.** A real fault matching none of the six labels still gets assigned one of them.
 
-Split: **segment-grouped 5-fold CV**. Each real baseline window spawns 51 synthetic rows, so a random split would place near-identical siblings on both sides and report near-perfect scores from leakage alone. Grouping by `segment_id` prevents that.
+Split: **segment-grouped 5-fold CV**, with training-fold-only feature selection and class weights. Each real baseline window spawns 51 synthetic rows, so a random split would place near-identical siblings on both sides and report near-perfect scores from leakage alone. Grouping by `segment_id` prevents that.
 
 ## 1. Cross-validated performance
 
 | model | macro F1 (mean +- sd across folds) | fold range |
 |---|---|---|
-| RandomForest | 0.966 +- 0.022 | 0.932 - 0.996 |
-| XGBoost | 0.973 +- 0.018 | 0.942 - 0.999 |
+| RandomForest | 0.963 +- 0.021 | 0.934 - 0.996 |
+| XGBoost | 0.968 +- 0.021 | 0.943 - 0.999 |
 
 ### Per-class detail (XGBoost, pooled over folds)
 
 | class | precision | recall | F1 | support |
 |---|---|---|---|---|
-| BELT_SLIP | 0.999 | 0.999 | 0.999 | 2250 |
-| COMBINED_FAULT | 0.948 | 0.988 | 0.968 | 2250 |
-| HIGH_VIBRATION | 0.996 | 0.973 | 0.984 | 2250 |
-| NORMAL | 0.866 | 0.951 | 0.907 | 225 |
-| OVERHEATING | 0.995 | 0.967 | 0.981 | 2250 |
-| RPM_INSTABILITY | 0.994 | 0.992 | 0.993 | 2250 |
+| BELT_SLIP | 0.996 | 0.999 | 0.998 | 2250 |
+| COMBINED_FAULT | 0.925 | 0.988 | 0.955 | 2250 |
+| HIGH_VIBRATION | 0.996 | 0.961 | 0.978 | 2250 |
+| NORMAL | 0.865 | 0.942 | 0.902 | 225 |
+| OVERHEATING | 0.994 | 0.966 | 0.979 | 2250 |
+| RPM_INSTABILITY | 0.995 | 0.980 | 0.988 | 2250 |
 
 ### Confusion matrix (XGBoost, rows = true)
 
 | | BELT_SLIP | COMBINED_FAULT | HIGH_VIBRATION | NORMAL | OVERHEATING | RPM_INSTABILITY |
 |---|---|---|---|---|---|---|
-| **BELT_SLIP** | 2247 | 3 | 0 | 0 | 0 | 0 |
-| **COMBINED_FAULT** | 3 | 2224 | 9 | 0 | 3 | 11 |
-| **HIGH_VIBRATION** | 0 | 61 | 2189 | 0 | 0 | 0 |
-| **NORMAL** | 0 | 0 | 0 | 214 | 9 | 2 |
-| **OVERHEATING** | 0 | 42 | 0 | 32 | 2176 | 0 |
-| **RPM_INSTABILITY** | 0 | 17 | 0 | 1 | 0 | 2232 |
+| **BELT_SLIP** | 2248 | 2 | 0 | 0 | 0 | 0 |
+| **COMBINED_FAULT** | 8 | 2222 | 9 | 0 | 3 | 8 |
+| **HIGH_VIBRATION** | 0 | 88 | 2162 | 0 | 0 | 0 |
+| **NORMAL** | 0 | 0 | 0 | 212 | 11 | 2 |
+| **OVERHEATING** | 0 | 45 | 0 | 32 | 2173 | 0 |
+| **RPM_INSTABILITY** | 0 | 44 | 0 | 1 | 0 | 2205 |
 
 ## 2. Recall by injected severity
 
@@ -44,12 +44,12 @@ The single most informative table here: a classifier that only works on severe f
 
 | severity | windows | recall | note |
 |---|---|---|---|
-| 0.00 | 225 | 0.951 | NORMAL windows (real, unmodified) |
-| 0.15 | 2250 | 0.954 |  |
-| 0.30 | 2250 | 0.986 |  |
-| 0.50 | 2250 | 0.992 |  |
-| 0.75 | 2250 | 0.993 |  |
-| 1.00 | 2250 | 0.994 |  |
+| 0.00 | 225 | 0.942 | NORMAL windows (real, unmodified) |
+| 0.15 | 2250 | 0.951 |  |
+| 0.30 | 2250 | 0.979 |  |
+| 0.50 | 2250 | 0.987 |  |
+| 0.75 | 2250 | 0.988 |  |
+| 1.00 | 2250 | 0.988 |  |
 
 ## 3. Feature importance (XGBoost)
 
@@ -57,21 +57,21 @@ Which features carry each deviation shape. Useful as a sanity check that the mod
 
 | rank | feature | importance |
 |---|---|---|
-| 1 | `vib_rms_mean` | 0.2144 |
-| 2 | `vib_rms_p25` | 0.1410 |
-| 3 | `rpm_max` | 0.1116 |
-| 4 | `rpm_mean` | 0.0910 |
-| 5 | `temp_over_ambient_min` | 0.0705 |
-| 6 | `vib_rms_min` | 0.0533 |
-| 7 | `rpm_range` | 0.0459 |
-| 8 | `rpm_min` | 0.0422 |
-| 9 | `temp_over_ambient_mean` | 0.0304 |
-| 10 | `vib_rms_median` | 0.0277 |
-| 11 | `temp_over_ambient_max` | 0.0200 |
-| 12 | `rpm_std` | 0.0200 |
-| 13 | `ambient_mean` | 0.0185 |
-| 14 | `temp_mean` | 0.0150 |
-| 15 | `acceleration_z_range` | 0.0069 |
+| 1 | `vib_rms_mean` | 0.2183 |
+| 2 | `vib_rms_p25` | 0.1293 |
+| 3 | `rpm_max` | 0.1083 |
+| 4 | `rpm_mean` | 0.0872 |
+| 5 | `temp_over_ambient_min` | 0.0686 |
+| 6 | `rpm_range` | 0.0516 |
+| 7 | `rpm_min` | 0.0473 |
+| 8 | `vib_rms_median` | 0.0425 |
+| 9 | `vib_rms_min` | 0.0379 |
+| 10 | `temp_over_ambient_mean` | 0.0361 |
+| 11 | `ambient_mean` | 0.0190 |
+| 12 | `rpm_std` | 0.0179 |
+| 13 | `temp_mean` | 0.0143 |
+| 14 | `acceleration_z_mean` | 0.0118 |
+| 15 | `vib_kurt_sensor_min` | 0.0090 |
 
 ## 4. How to retrain this on real labelled data
 

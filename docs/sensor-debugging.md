@@ -255,3 +255,16 @@ was acceleration, and `usbserial-6` was Hall — different from the old wiring d
 
 Manufacturer references: [ADXL345 data sheet, Tables 7 and 39, asynchronous reads](https://www.analog.com/media/en/technical-documentation/data-sheets/ADXL345.pdf)
 and [MLX90614 documentation](https://www.melexis.com/en/documents/documentation/datasheets/datasheet-mlx90614).
+
+
+## 2026-09-06 long recording: simultaneous USB silence
+
+During recording `2026-09-06T17-29-57.647Z-a70e3e55`, all three streams stopped around 17:45:50 UTC (23:15:50 IST). The gateway, MQTT broker and timed recorder remained running. The dashboard correctly showed the absent data as offline. Arduino CLI and the macOS USB registry listed two CP2102 devices, with the third device absent; neither visible port produced serial bytes. A direct esptool attempt failed in termios configuration, and an explicit RTS/DTR reset/release received zero bytes over five seconds on each port. The cable, adapter, board power, and driver cause is not yet established; physical USB reconnection is needed next. No firmware was changed.
+
+The bridge previously enumerated ports only on MQTT connect and retried obsolete names forever. It now scans every two seconds, handles renamed/reconnected ports, uses macOS callout device paths, and keeps only one owner per discovered port. A failed open has a bounded retry even without a close event. Broker reconnects no longer create duplicate port owners or heartbeat timers. Starting with zero USB devices now leaves the bridge waiting for connections.
+
+Validation: seven serial discovery/retry/shutdown regression tests plus seven recorder tests passed (`node --test tools/serial-ports.test.js tools/record-session.test.js`); Node and shell syntax checks passed. Actual sensor recovery still requires verifying fresh frames after physical reconnection. The recording's original automatic stop deadline remains 01:29:57 IST on September 7. Outages remain gaps, with the acquisition code transition and diagnostic attempts documented in the session directory.
+
+The manual reset attempt follows [Espressif's RTS/DTR and boot-mode documentation](https://docs.espressif.com/projects/esptool/en/latest/esp32/advanced-topics/boot-mode-selection.html).
+
+Recovery verified after the operator reconnected all three USB boards (around 17:56 UTC): the running bridge discovered the new ports without a restart; Hall, MLX90614 and ADXL345 numeric frames reached the dashboard and the original recorder again. At verification, Hall measured about 20.53 belt RPM / 0.4106 m/s, surface temperature 35.75 °C, and vibration RMS 0.0651 g. Values are dated observations, not calibration references. Exact interruption boundaries are preserved in the session's `usb-reconnection-verification.json`. This confirms reconnection restored the feed; it does not identify the original electrical/driver cause.

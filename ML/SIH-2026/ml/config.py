@@ -46,7 +46,9 @@ def resolve_telemetry_path() -> str:
       3. data/<cleaned recording dir>/telemetry.csv (the actual shipped layout)
     """
     env = os.environ.get("CONVEYOR_TELEMETRY_CSV")
-    if env and os.path.exists(env):
+    if env:
+        if not os.path.isfile(env):
+            raise FileNotFoundError("CONVEYOR_TELEMETRY_CSV does not exist: " + env)
         return os.path.abspath(env)
 
     direct = os.path.join(DATA_DIR, "telemetry.csv")
@@ -67,9 +69,9 @@ def recording_dir() -> str:
     return os.path.dirname(resolve_telemetry_path())
 
 
-def load_sidecar(name: str):
+def load_sidecar(name: str, csv_path=None):
     """Load a sidecar JSON that ships with the cleaned recording (manifest/segments)."""
-    p = os.path.join(recording_dir(), name)
+    p = os.path.join(os.path.dirname(csv_path) if csv_path else recording_dir(), name)
     if not os.path.exists(p):
         return None
     with open(p, "r", encoding="utf-8") as fh:
@@ -83,7 +85,7 @@ def load_sidecar(name: str):
 # preprocessing.py verifies each one against the actual file and reports mismatches;
 # the sensor->column mapping that the pipeline actually uses is derived from the data.
 # --------------------------------------------------------------------------------------
-TIME_COL = "ts_ms"            # device timestamp; segments.json boundaries are defined on it
+TIME_COL = "ts_ms"            # laptop USB-bridge arrival time, not an acquisition clock
 RECV_TIME_COL = "received_at_ms"
 NODE_COL = "node"
 SEGMENT_COL = "segment_id"

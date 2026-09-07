@@ -5,7 +5,7 @@
     "algorithm": "IsolationForest",
     "parameters": {
       "n_estimators": 600,
-      "max_samples": 128,
+      "max_samples": "auto",
       "contamination": 0.02,
       "random_state": 42,
       "n_jobs": -1,
@@ -14,26 +14,26 @@
   },
   "score_distribution": {
     "anomaly": {
-      "min": 2.869446570359073,
-      "p25": 6.40221778788475,
-      "median": 8.82212258097862,
-      "mean": 14.946028514086736,
-      "p75": 17.118328327216794,
-      "p90": 34.92771163640936,
-      "p95": 43.50466143803208,
-      "p99": 73.23203934009811,
-      "max": 99.33393985564592
+      "min": 3.244444513458973,
+      "p25": 6.1537824887428005,
+      "median": 8.449184245292717,
+      "mean": 14.77580113090726,
+      "p75": 16.442531130089463,
+      "p90": 33.91037968584248,
+      "p95": 46.90638049793838,
+      "p99": 81.4119572158441,
+      "max": 99.78985704314192
     },
     "health": {
-      "min": 0.666060144354077,
-      "p25": 82.8816716727832,
-      "median": 91.17787741902139,
-      "mean": 85.05397148591327,
-      "p75": 93.59778221211525,
-      "p90": 95.28024099136854,
-      "p95": 95.91591107124695,
-      "p99": 96.40374221195427,
-      "max": 97.13055342964093
+      "min": 0.21014295685807838,
+      "p25": 83.55746886991054,
+      "median": 91.55081575470729,
+      "mean": 85.22419886909275,
+      "p75": 93.8462175112572,
+      "p90": 95.28735225488172,
+      "p95": 95.84598287091521,
+      "p99": 96.58435384932635,
+      "max": 96.75555548654103
     }
   },
   "status_mix": {
@@ -44,9 +44,9 @@
   },
   "thresholds": {
     "thresholds": {
-      "watch": 34.9,
-      "warning": 60.6,
-      "critical": 91.7
+      "watch": 33.9,
+      "warning": 62.2,
+      "critical": 93.7
     },
     "derivation": {
       "watch": "baseline anomaly-score p90",
@@ -67,75 +67,81 @@
     "disclaimer": "PROTOTYPE THRESHOLDS. Derived from one unlabelled recording of one conveyor. They are not industrial safety limits, not certified trip points, and carry no guarantee of detecting any particular fault. Edit models/thresholds.json to retune without retraining."
   },
   "calibration": {
-    "raw_median": -0.07704674705011338,
-    "raw_mad_scaled": 0.019800870881555244,
-    "z_mid": 4.830605321031947,
-    "z_scale": 1.6405859843627912,
-    "baseline_raw_p50": -0.07704674705011338,
-    "baseline_raw_p95": -0.014528280015041445,
-    "baseline_raw_p99": 0.018603445191393925,
+    "raw_median": -0.0814867108887471,
+    "raw_mad_scaled": 0.020658353015643654,
+    "z_mid": 4.616259148738109,
+    "z_scale": 1.5677890360101654,
+    "baseline_raw_p50": -0.0814867108887471,
+    "baseline_raw_p95": -0.0146468974669963,
+    "baseline_raw_p99": 0.013877600217579425,
     "baseline_n": 225,
     "note": "anomaly_score = 100 / (1 + exp(-(z - z_mid) / z_scale)) where z = (raw - raw_median) / raw_mad_scaled and raw = -decision_function. 50 corresponds to the baseline 99th percentile of unusualness. This is a relative unusualness scale, not a failure probability."
   },
   "segment_stability": [
     {
       "fold": 0,
+      "n_features_fitted_on_training_only": 59,
       "n_train_windows": 180,
       "n_heldout_windows": 45,
       "n_heldout_segments": 6,
       "train_median_score": 5.0,
-      "heldout_median_score": 10.65,
+      "heldout_median_score": 10.53,
       "train_pct_ge_watch": 10.0,
-      "heldout_pct_ge_watch": 28.9,
-      "heldout_pct_ge_warning": 4.4
+      "heldout_pct_ge_watch": 35.6,
+      "heldout_pct_ge_warning": 11.1
     },
     {
       "fold": 1,
+      "n_features_fitted_on_training_only": 61,
       "n_train_windows": 180,
       "n_heldout_windows": 45,
       "n_heldout_segments": 7,
       "train_median_score": 5.0,
-      "heldout_median_score": 5.03,
+      "heldout_median_score": 4.87,
       "train_pct_ge_watch": 10.0,
       "heldout_pct_ge_watch": 2.2,
       "heldout_pct_ge_warning": 2.2
     },
     {
       "fold": 2,
+      "n_features_fitted_on_training_only": 59,
       "n_train_windows": 180,
       "n_heldout_windows": 45,
       "n_heldout_segments": 8,
       "train_median_score": 5.0,
-      "heldout_median_score": 8.39,
+      "heldout_median_score": 8.79,
       "train_pct_ge_watch": 10.0,
-      "heldout_pct_ge_watch": 28.9,
-      "heldout_pct_ge_warning": 8.9
+      "heldout_pct_ge_watch": 37.8,
+      "heldout_pct_ge_warning": 11.1
     },
     {
       "fold": 3,
+      "n_features_fitted_on_training_only": 58,
       "n_train_windows": 180,
       "n_heldout_windows": 45,
       "n_heldout_segments": 8,
       "train_median_score": 5.0,
-      "heldout_median_score": 10.66,
+      "heldout_median_score": 10.81,
       "train_pct_ge_watch": 10.0,
-      "heldout_pct_ge_watch": 4.4,
+      "heldout_pct_ge_watch": 17.8,
       "heldout_pct_ge_warning": 0.0
     },
     {
       "fold": 4,
+      "n_features_fitted_on_training_only": 59,
       "n_train_windows": 180,
       "n_heldout_windows": 45,
       "n_heldout_segments": 8,
       "train_median_score": 5.0,
-      "heldout_median_score": 5.41,
+      "heldout_median_score": 5.43,
       "train_pct_ge_watch": 10.0,
       "heldout_pct_ge_watch": 6.7,
-      "heldout_pct_ge_warning": 0.0
+      "heldout_pct_ge_warning": 2.2
     }
   ],
   "chronological_drift": {
     "split_rule": "segments ordered by start time; earliest 26 of 37 segments (70%) used to fit, remaining 11 segments scored",
+    "n_features_fitted_on_training_only": 62,
     "train_segments": [
       "S001",
       "S002",
@@ -188,13 +194,13 @@
       2405.9
     ],
     "train_median_score": 5.0,
-    "eval_median_score": 16.8,
+    "eval_median_score": 15.14,
     "train_pct_ge_watch": 10.2,
-    "eval_pct_ge_watch": 35.4,
+    "eval_pct_ge_watch": 37.5,
     "eval_status_mix": {
-      "NORMAL": 31,
+      "NORMAL": 30,
       "WATCH": 13,
-      "WARNING": 3,
+      "WARNING": 4,
       "CRITICAL": 1
     },
     "train_temp_mean_c": 34.09,
@@ -202,9 +208,9 @@
     "train_vib_rms_mean_g": 0.06703,
     "eval_vib_rms_mean_g": 0.06715,
     "thresholds_from_train": {
-      "watch": 22.3,
-      "warning": 43.3,
-      "critical": 55.1
+      "watch": 20.1,
+      "warning": 32.7,
+      "critical": 59.7
     }
   },
   "time_confounding": [
@@ -358,7 +364,7 @@
     },
     {
       "feature": "ambient_slope_per_s",
-      "spearman_with_session_time": -0.169
+      "spearman_with_session_time": -0.168
     },
     {
       "feature": "vib_kurt_sensor_std",
@@ -448,18 +454,18 @@
   "model_comparison": [
     {
       "model": "LocalOutlierFactor(n_neighbors=20, novelty=True)",
-      "spearman_vs_isolation_forest": 0.798,
-      "top10_overlap_with_if": 2
+      "spearman_vs_isolation_forest": 0.813,
+      "top10_overlap_with_if": 3
     },
     {
       "model": "OneClassSVM(rbf, nu=0.05, gamma=scale)",
-      "spearman_vs_isolation_forest": 0.816,
-      "top10_overlap_with_if": 2
+      "spearman_vs_isolation_forest": 0.796,
+      "top10_overlap_with_if": 3
     },
     {
       "model": "OneClassSVM(rbf, nu=0.02, gamma=scale)",
-      "spearman_vs_isolation_forest": 0.815,
-      "top10_overlap_with_if": 3
+      "spearman_vs_isolation_forest": 0.796,
+      "top10_overlap_with_if": 4
     }
   ],
   "feature_parity": {
@@ -467,9 +473,11 @@
     "n_features": 59,
     "max_abs_diff": 7.105427357601002e-15,
     "worst_feature": "temp_mean",
-    "passed": true,
-    "ingest_windows_replayed": 25,
-    "ingest_windows_that_failed_to_score": 0
+    "boundaries_match": true,
+    "ingest_windows_replayed": 225,
+    "ingest_windows_that_failed_to_score": 0,
+    "mismatches": [],
+    "passed": true
   },
   "top_windows": [
     {
@@ -485,9 +493,9 @@
       "rpm_mean": 20.524,
       "vibration_rms_mean_g": 0.06945,
       "vibration_rms_max_g": 0.1311,
-      "raw_score": 0.132566,
-      "anomaly_score": 99.33,
-      "health_score": 0.67,
+      "raw_score": 0.18864,
+      "anomaly_score": 99.79,
+      "health_score": 0.21,
       "status": "CRITICAL",
       "driver_detector": "vibration",
       "indicators": "vibration_crest_elevated|vibration_range_elevated|vibration_peak_above_baseline|vibration_variability_elevated",
@@ -508,9 +516,9 @@
       "rpm_mean": 20.502,
       "vibration_rms_mean_g": 0.06852,
       "vibration_rms_max_g": 0.1011,
-      "raw_score": 0.053669,
-      "anomaly_score": 94.13,
-      "health_score": 5.87,
+      "raw_score": 0.053007,
+      "anomaly_score": 95.05,
+      "health_score": 4.95,
       "status": "CRITICAL",
       "driver_detector": "vibration",
       "indicators": "vibration_crest_elevated|vibration_range_elevated|vibration_peak_above_baseline|vibration_variability_elevated",
@@ -531,9 +539,9 @@
       "rpm_mean": 20.559,
       "vibration_rms_mean_g": 0.06802,
       "vibration_rms_max_g": 0.0804,
-      "raw_score": -0.025388,
-      "anomaly_score": 73.92,
-      "health_score": 26.08,
+      "raw_score": -0.0179,
+      "anomaly_score": 84.15,
+      "health_score": 15.85,
       "status": "WARNING",
       "driver_detector": "temperature",
       "indicators": "temperature_swing_elevated|multiple_sensors_deviating",
@@ -551,12 +559,12 @@
       "t_rel_start_s": 740.245,
       "temperature_mean_c": 34.055,
       "ambient_mean_c": 29.182,
-      "rpm_mean": 20.572,
+      "rpm_mean": 20.571,
       "vibration_rms_mean_g": 0.07168,
       "vibration_rms_max_g": 0.081,
-      "raw_score": -0.033736,
-      "anomaly_score": 71.04,
-      "health_score": 28.96,
+      "raw_score": -0.026377,
+      "anomaly_score": 72.74,
+      "health_score": 27.26,
       "status": "WARNING",
       "driver_detector": "rpm",
       "indicators": "rpm_increasing|multiple_sensors_deviating",
@@ -577,9 +585,9 @@
       "rpm_mean": 20.446,
       "vibration_rms_mean_g": 0.06123,
       "vibration_rms_max_g": 0.0659,
-      "raw_score": -0.001699,
-      "anomaly_score": 62.8,
-      "health_score": 37.2,
+      "raw_score": 0.001857,
+      "anomaly_score": 65.15,
+      "health_score": 34.85,
       "status": "WARNING",
       "driver_detector": "temperature",
       "indicators": "vibration_below_baseline|multiple_sensors_deviating",
@@ -600,38 +608,15 @@
       "rpm_mean": 20.564,
       "vibration_rms_mean_g": 0.0712,
       "vibration_rms_max_g": 0.081,
-      "raw_score": -0.049244,
-      "anomaly_score": 58.16,
-      "health_score": 41.84,
+      "raw_score": -0.038835,
+      "anomaly_score": 59.1,
+      "health_score": 40.9,
       "status": "WATCH",
       "driver_detector": "rpm",
       "indicators": "rpm_range_elevated|rpm_instability",
       "explanation": "The spread between minimum and maximum drive speed is unusually wide; and drive speed is less steady than the baseline.",
       "top_deviation_1": "rpm_range",
       "top_deviation_1_z": 4.38
-    },
-    {
-      "window_id": 12,
-      "segment_id": "S002",
-      "segment_order": 1,
-      "start_ms": 1788715848666,
-      "end_ms": 1788715858666,
-      "start_utc": "2026-09-06T17:30:48.666000+00:00",
-      "t_rel_start_s": 48.382,
-      "temperature_mean_c": 31.616,
-      "ambient_mean_c": 28.06,
-      "rpm_mean": 20.458,
-      "vibration_rms_mean_g": 0.0615,
-      "vibration_rms_max_g": 0.0715,
-      "raw_score": 0.021988,
-      "anomaly_score": 53.7,
-      "health_score": 46.3,
-      "status": "WATCH",
-      "driver_detector": "vibration",
-      "indicators": "vibration_crest_elevated|vibration_below_baseline",
-      "explanation": "Vibration crest factor peaked above the baseline; and average vibration is below the learned baseline.",
-      "top_deviation_1": "vib_crest_sensor_range",
-      "top_deviation_1_z": 4.62
     },
     {
       "window_id": 7,
@@ -646,9 +631,9 @@
       "rpm_mean": 20.456,
       "vibration_rms_mean_g": 0.06387,
       "vibration_rms_max_g": 0.0759,
-      "raw_score": -0.002335,
-      "anomaly_score": 51.97,
-      "health_score": 48.03,
+      "raw_score": 0.001924,
+      "anomaly_score": 54.24,
+      "health_score": 45.76,
       "status": "WATCH",
       "driver_detector": "rpm",
       "indicators": "rpm_range_elevated",
@@ -657,50 +642,73 @@
       "top_deviation_1_z": -3.37
     },
     {
-      "window_id": 153,
-      "segment_id": "S030",
-      "segment_order": 29,
-      "start_ms": 1788717503395,
-      "end_ms": 1788717513395,
-      "start_utc": "2026-09-06T17:58:23.395000+00:00",
-      "t_rel_start_s": 1703.111,
-      "temperature_mean_c": 36.259,
-      "ambient_mean_c": 29.953,
-      "rpm_mean": 20.547,
-      "vibration_rms_mean_g": 0.06597,
-      "vibration_rms_max_g": 0.0746,
-      "raw_score": -0.046475,
-      "anomaly_score": 50.66,
-      "health_score": 49.34,
+      "window_id": 12,
+      "segment_id": "S002",
+      "segment_order": 1,
+      "start_ms": 1788715848666,
+      "end_ms": 1788715858666,
+      "start_utc": "2026-09-06T17:30:48.666000+00:00",
+      "t_rel_start_s": 48.382,
+      "temperature_mean_c": 31.616,
+      "ambient_mean_c": 28.06,
+      "rpm_mean": 20.458,
+      "vibration_rms_mean_g": 0.0615,
+      "vibration_rms_max_g": 0.0715,
+      "raw_score": 0.017652,
+      "anomaly_score": 52.91,
+      "health_score": 47.09,
+      "status": "WATCH",
+      "driver_detector": "joint",
+      "indicators": "vibration_crest_elevated|vibration_below_baseline",
+      "explanation": "Vibration crest factor peaked above the baseline; and average vibration is below the learned baseline.",
+      "top_deviation_1": "vib_crest_sensor_range",
+      "top_deviation_1_z": 4.62
+    },
+    {
+      "window_id": 185,
+      "segment_id": "S053",
+      "segment_order": 52,
+      "start_ms": 1788717881071,
+      "end_ms": 1788717891071,
+      "start_utc": "2026-09-06T18:04:41.071000+00:00",
+      "t_rel_start_s": 2080.787,
+      "temperature_mean_c": 36.475,
+      "ambient_mean_c": 30.26,
+      "rpm_mean": 20.48,
+      "vibration_rms_mean_g": 0.0661,
+      "vibration_rms_max_g": 0.0782,
+      "raw_score": -0.006324,
+      "anomaly_score": 51.68,
+      "health_score": 48.32,
+      "status": "WATCH",
+      "driver_detector": "vibration",
+      "indicators": "orientation_shift",
+      "explanation": "The static acceleration vector has shifted, which can indicate a mounting change.",
+      "top_deviation_1": "acceleration_x_mean",
+      "top_deviation_1_z": 12.81
+    },
+    {
+      "window_id": 203,
+      "segment_id": "S071",
+      "segment_order": 70,
+      "start_ms": 1788718109679,
+      "end_ms": 1788718119679,
+      "start_utc": "2026-09-06T18:08:29.679000+00:00",
+      "t_rel_start_s": 2309.395,
+      "temperature_mean_c": 37.071,
+      "ambient_mean_c": 30.321,
+      "rpm_mean": 20.544,
+      "vibration_rms_mean_g": 0.06697,
+      "vibration_rms_max_g": 0.0786,
+      "raw_score": -0.05508,
+      "anomaly_score": 50.12,
+      "health_score": 49.88,
       "status": "WATCH",
       "driver_detector": "temperature",
       "indicators": "",
       "explanation": "Window scored as WATCH by the model, but no single feature exceeds the reporting threshold -- the deviation is spread across many features rather than concentrated in one.",
-      "top_deviation_1": "ambient_slope_per_s",
-      "top_deviation_1_z": 3.84
-    },
-    {
-      "window_id": 210,
-      "segment_id": "S071",
-      "segment_order": 70,
-      "start_ms": 1788718127179,
-      "end_ms": 1788718137179,
-      "start_utc": "2026-09-06T18:08:47.179000+00:00",
-      "t_rel_start_s": 2326.895,
-      "temperature_mean_c": 36.95,
-      "ambient_mean_c": 30.394,
-      "rpm_mean": 20.538,
-      "vibration_rms_mean_g": 0.0679,
-      "vibration_rms_max_g": 0.081,
-      "raw_score": -0.023529,
-      "anomaly_score": 47.9,
-      "health_score": 52.1,
-      "status": "WATCH",
-      "driver_detector": "temperature",
-      "indicators": "multiple_sensors_deviating",
-      "explanation": "Window scored as WATCH by the model, but no single feature exceeds the reporting threshold -- the deviation is spread across many features rather than concentrated in one.",
-      "top_deviation_1": "acceleration_y_min",
-      "top_deviation_1_z": -3.44
+      "top_deviation_1": "acceleration_z_range",
+      "top_deviation_1_z": 3.88
     }
   ]
 }

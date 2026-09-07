@@ -1,4 +1,4 @@
-"""Physics-motivated fault injection into the real operator-attested normal recording.
+"""Physics-motivated fault injection into the real unlabelled operating-baseline recording.
 
 READ THIS BEFORE USING ANY NUMBER DERIVED FROM THIS MODULE
 ==========================================================

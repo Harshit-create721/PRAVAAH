@@ -1,7 +1,10 @@
 """Real-time conveyor condition inference.
 
 Feeds individual sensor observations in as they arrive, maintains a per-sensor rolling
-buffer, and emits a scored JSON verdict once a full window is available.
+buffer, and emits a scored JSON verdict every 2.5 s after a full 10 s window.
+Live payloads require healthy sensor_health and accept the bridge timestamp `ts`
+or exported `ts_ms` (both milliseconds). Unknown nodes, missing/non-finite data,
+unhealthy frames and discontinuities invalidate the synchronized window.
 
 Feature parity with training is structural, not merely intended: this module calls the
 same `feature_engineering.compute_window_features` that built the training table, then
@@ -19,10 +22,10 @@ Usage
 An observation on stdin is one frame from one node, e.g.
 
   {"node":"esp32-vibration-01","ts_ms":1788715800284,"vibration_rms":0.0579,
-   "vibration_kurtosis":3.462,"vibration_crest":2.101,"acceleration_x":0.1084,
+   "sensor_health":{"vibration":"healthy"},"vibration_kurtosis":3.462,"vibration_crest":2.101,"acceleration_x":0.1084,
    "acceleration_y":-1.0501,"acceleration_z":-0.1527,"acceleration_magnitude":1.068}
-  {"node":"esp32-thermal-01","ts_ms":1788715800657,"temperature":31.57,"ambient":27.91}
-  {"node":"esp32-marker-01","ts_ms":1788715800665,"hall_rpm":20.59}
+  {"node":"esp32-thermal-01","ts_ms":1788715800657,"sensor_health":{"mlx":"healthy"},"temperature":31.57,"ambient":27.91}
+  {"node":"esp32-marker-01","ts_ms":1788715800665,"sensor_health":{"speed":"healthy"},"hall_rpm":20.59}
 
 `segment_id` is optional; if supplied, a change of value clears the buffers so no window
 is ever built across a segment boundary.
@@ -41,12 +44,13 @@ import pandas as pd
 import config as C
 import feature_engineering as fe
 import health_score as hs
+from streaming import WindowStream
 
 
 class ConveyorMonitor:
     """Rolling-window scorer. One instance per conveyor."""
 
-    def __init__(self, models_dir: str = None):
+    def __init__(self, models_dir: str = None, include_features=False):
         models_dir = models_dir or C.MODELS_DIR
         import os
         self.model = joblib.load(os.path.join(models_dir, "isolation_forest.joblib"))
@@ -69,89 +73,60 @@ class ConveyorMonitor:
 
         self.engine = hs.ScoreEngine.load(models_dir)
 
-        self.buffers = {role: deque() for role in C.REQUIRED_SENSORS}
-        self.current_segment = None
-        self.last_ts = None
+        self.include_features = include_features
+        self.stream = WindowStream(self.node_to_sensor, self.window_ms,
+                                   int(round(self.fcfg["step_seconds"] * 1000)),
+                                   self.min_frames, self.min_coverage)
+        self.pending = deque()
 
-    # ---------------------------------------------------------------- ingest
-    def reset(self, segment_id=None) -> None:
-        for b in self.buffers.values():
-            b.clear()
-        self.current_segment = segment_id
-        self.last_ts = None
+    def reset(self, segment_id=None):
+        self.stream.reset(segment_id)
+        self.pending.clear()
 
-    def sensor_role_for(self, obs: dict):
-        node = obs.get("node")
-        if node in self.node_to_sensor:
-            return self.node_to_sensor[node]
-        # Fall back to whichever required column set the payload satisfies.
-        for role, cols in self.required_cols.items():
-            payload = [c for c in cols if c != "ts_ms"]
-            if payload and all(c in obs for c in payload):
-                return role
-        return None
+    def data_status(self, now_ms=None):
+        """Live consumers must poll with wall-clock milliseconds during silence."""
+        return self.stream.tick(now_ms) if now_ms is not None else self.stream.status()
 
-    def push(self, obs: dict) -> dict:
-        """Add one frame. Returns a verdict when a full window is ready, else None."""
-        ts = obs.get("ts_ms")
-        if ts is None:
-            raise ValueError("observation is missing ts_ms: %r" % obs)
-        ts = int(ts)
+    def push(self, obs):
+        """Return the first completed verdict, or None. drain() returns any others.
 
-        seg = obs.get("segment_id")
-        if seg is not None and seg != self.current_segment:
-            # Segment boundary: never build a window across one.
-            self.reset(seg)
-        elif self.last_ts is not None and ts < self.last_ts - self.window_ms:
-            # Clock went backwards by more than a window -- treat as a new run.
-            self.reset(seg)
-        self.last_ts = ts
+        Invalid frames raise ValueError AND invalidate the synchronized buffer.
+        They must be rendered as data unavailable, never as a mechanical alarm.
+        """
+        try:
+            windows = self.stream.push(obs)
+        except ValueError:
+            self.pending.clear()
+            raise
+        self.pending.extend(self._score_window(w) for w in windows)
+        return self.pending.popleft() if self.pending else None
 
-        role = self.sensor_role_for(obs)
-        if role is None:
-            return None
+    def drain(self):
+        out = list(self.pending)
+        self.pending.clear()
+        return out
 
-        missing = [c for c in self.required_cols[role] if c != "ts_ms" and c not in obs]
-        if missing:
-            raise ValueError("frame from role '%s' is missing %s" % (role, missing))
+    def finish_segment(self):
+        """Flush a finite recording at its last observed timestamp; not a live timer."""
+        self.pending.extend(self._score_window(w) for w in self.stream.finish_segment())
+        return self.drain()
 
-        rec = {C.TIME_COL: ts, C.SEGMENT_COL: seg}
-        for c in self.required_cols[role]:
-            if c != "ts_ms":
-                rec[c] = float(obs[c])
-        self.buffers[role].append(rec)
-
-        cutoff = ts - self.window_ms
-        for b in self.buffers.values():
-            while b and b[0][C.TIME_COL] < cutoff:
-                b.popleft()
-
-        return self.evaluate_current_window()
-
-    # ---------------------------------------------------------------- score
-    def _frames(self):
-        return {role: pd.DataFrame(list(b)) for role, b in self.buffers.items()}
-
-    def window_ready(self) -> bool:
-        parts = self._frames()
-        for role in C.REQUIRED_SENSORS:
-            d = parts[role]
-            if len(d) < self.min_frames:
-                return False
-            t = d[C.TIME_COL].to_numpy()
-            if (t.max() - t.min()) / 1000.0 < self.min_coverage * self.window_s:
-                return False
-        return True
-
-    def evaluate_current_window(self):
-        if not self.window_ready():
-            return None
-        parts = self._frames()
-        return self.score_frames(parts["vibration"], parts["thermal"], parts["speed"])
+    def _score_window(self, window):
+        parts = window["parts"]
+        result = self.score_frames(parts["vibration"], parts["thermal"], parts["speed"])
+        result.update({"start_ms": window["start_ms"], "end_ms": window["end_ms"],
+                       "segment_id": window["segment_id"],
+                       "window_start": pd.Timestamp(window["start_ms"], unit="ms", tz="UTC").isoformat(),
+                       "timestamp": pd.Timestamp(window["end_ms"], unit="ms", tz="UTC").isoformat()})
+        return result
 
     def score_frames(self, vib: pd.DataFrame, thermal: pd.DataFrame,
                      speed: pd.DataFrame) -> dict:
         """Score one already-assembled window. Same code path as training."""
+        valid, reason = fe.window_is_valid({"vibration": vib, "thermal": thermal, "speed": speed},
+                                           self.window_s, self.min_frames, self.min_coverage)
+        if not valid:
+            raise ValueError(reason)
         feats = fe.compute_window_features(vib, thermal, speed, self.window_s)
         missing = [f for f in self.feature_order if f not in feats]
         if missing:
@@ -175,7 +150,9 @@ class ConveyorMonitor:
         start_ms = int(min(vib[C.TIME_COL].min(), thermal[C.TIME_COL].min(),
                            speed[C.TIME_COL].min()))
 
-        return {
+        result = {
+            "type": "condition",
+            "data_quality": "valid",
             "timestamp": pd.Timestamp(end_ms, unit="ms", tz="UTC").isoformat(),
             "window_start": pd.Timestamp(start_ms, unit="ms", tz="UTC").isoformat(),
             "window_seconds": self.window_s,
@@ -200,6 +177,9 @@ class ConveyorMonitor:
                               "learned baseline, on 0-100. It is not a probability of "
                               "failure and not a remaining-useful-life estimate."),
         }
+        if self.include_features:
+            result["features"] = {f: feats[f] for f in self.feature_order}
+        return result
 
 
 # --------------------------------------------------------------------------------------
@@ -224,67 +204,54 @@ def _window_parts(pre, start_ms, end_ms, segment_id):
 
 
 def self_test(verbose: bool = True) -> dict:
-    """Assert the streaming path reproduces the training features exactly."""
-    mon = ConveyorMonitor()
-    feats_tbl = pd.read_csv(C.FEATURES_CSV)
+    """Replay every real frame, checking actual emitted boundaries/features/scores."""
+    mon = ConveyorMonitor(include_features=True)
+    expected = pd.read_csv(C.FEATURES_CSV)
     pre = _recorded_windows()
-    order = mon.feature_order
+    verdicts = []
+    for row in pre.raw.to_dict("records"):
+        observation = {k: v for k, v in row.items() if pd.notna(v)}
+        verdict = mon.push(observation)
+        if verdict is not None:
+            verdicts.append(verdict)
+        verdicts.extend(mon.drain())
+    verdicts.extend(mon.finish_segment())
 
-    max_diff, worst, n = 0.0, None, 0
-    for row in feats_tbl.itertuples(index=False):
-        parts = _window_parts(pre, int(row.start_ms), int(row.end_ms), row.segment_id)
-        live = fe.compute_window_features(parts["vibration"], parts["thermal"],
-                                          parts["speed"], mon.window_s)
-        a = np.array([live[f] for f in order], dtype=float)
-        b = np.array([getattr(row, f) for f in order], dtype=float)
-        d = np.max(np.abs(a - b))
-        if d > max_diff:
-            max_diff, worst = float(d), order[int(np.argmax(np.abs(a - b)))]
-        n += 1
-
+    key = lambda r: (r["segment_id"], int(r["start_ms"]), int(r["end_ms"]))
+    expected_keys = [key(r) for r in expected.to_dict("records")]
+    actual_keys = [key(r) for r in verdicts]
+    boundaries_match = expected_keys == actual_keys
+    max_diff, worst, mismatches = 0.0, None, []
+    scored = mon.engine.score(expected[mon.feature_order].to_numpy(float))
+    by_key = {key(r): r for r in verdicts}
+    for i, row in enumerate(expected.to_dict("records")):
+        v = by_key.get(key(row))
+        if v is None:
+            mismatches.append({"window_id": row["window_id"], "reason": "missing window"})
+            continue
+        a = np.array([v["features"][f] for f in mon.feature_order])
+        b = np.array([row[f] for f in mon.feature_order])
+        diff = float(np.max(np.abs(a - b)))
+        if diff > max_diff:
+            max_diff, worst = diff, mon.feature_order[int(np.argmax(np.abs(a - b)))]
+        scores_match = all(v[name] == round(float(scored[name][i]), 1)
+                           for name in ("anomaly_score", "health_score"))
+        counts_match = all(v["frames_used"][r] == row["n_" + r + "_frames"]
+                           for r in C.REQUIRED_SENSORS)
+        if diff >= 1e-9 or not scores_match or not counts_match or v["status"] != scored["status"][i]:
+            mismatches.append({"window_id": row["window_id"], "reason": "features, scores or frame counts differ"})
     result = {
-        "n_windows_checked": n,
-        "n_features": len(order),
-        "max_abs_diff": max_diff,
-        "worst_feature": worst,
-        "passed": bool(max_diff < 1e-9),
+        "n_windows_checked": len(expected), "n_features": len(mon.feature_order),
+        "max_abs_diff": max_diff, "worst_feature": worst,
+        "boundaries_match": boundaries_match,
+        "ingest_windows_replayed": len(verdicts),
+        "ingest_windows_that_failed_to_score": len(set(expected_keys) - set(actual_keys)),
+        "mismatches": mismatches,
+        "passed": bool(len(expected) > 0 and boundaries_match and not mismatches),
     }
     if verbose:
-        print("feature parity self-test: %d windows x %d features, max |diff| = %.3e (%s)"
-              % (n, len(order), max_diff, "PASS" if result["passed"] else "FAIL"))
-        if worst and max_diff > 0:
-            print("  largest difference in: %s" % worst)
-
-    # Second half: drive the same windows through the real push() ingest path.
-    ingest_checked = 0
-    ingest_mismatch = 0
-    node_of = {v: k for k, v in mon.node_to_sensor.items()}
-    for row in feats_tbl.head(25).itertuples(index=False):
-        parts = _window_parts(pre, int(row.start_ms), int(row.end_ms), row.segment_id)
-        obs_list = []
-        for role, d in parts.items():
-            for r in d.to_dict(orient="records"):
-                o = {"node": node_of[role], "ts_ms": int(r[C.TIME_COL]),
-                     "segment_id": row.segment_id}
-                for c in mon.required_cols[role]:
-                    if c != "ts_ms":
-                        o[c] = r[c]
-                obs_list.append(o)
-        obs_list.sort(key=lambda o: o["ts_ms"])
-        mon.reset()
-        verdict = None
-        for o in obs_list:
-            v = mon.push(o)
-            if v is not None:
-                verdict = v
-        ingest_checked += 1
-        if verdict is None:
-            ingest_mismatch += 1
-    result["ingest_windows_replayed"] = ingest_checked
-    result["ingest_windows_that_failed_to_score"] = ingest_mismatch
-    if verbose:
-        print("streaming ingest replay: %d/%d windows produced a verdict"
-              % (ingest_checked - ingest_mismatch, ingest_checked))
+        print("streaming parity: %d/%d windows, features/scores/boundaries/counts: %s (max diff %.3e)"
+              % (len(verdicts), len(expected), "PASS" if result["passed"] else "FAIL", max_diff))
     return result
 
 
@@ -338,32 +305,56 @@ def window_at(second: float):
 
 
 def from_stdin():
-    """Read one JSON observation per line; print a verdict whenever a window closes."""
+    """JSONL live input with a silence watchdog; stdout always remains machine readable.
+
+    A reader thread handles portable blocking stdin. The main thread polls once a
+    second so unplugged sensors cannot leave a previous condition marked current.
+    """
+    import queue
+    import threading
+    import time
+    lines = queue.Queue(maxsize=256)
+    def read_lines():
+        for line in sys.stdin:
+            lines.put(line)
+        lines.put(None)
+    threading.Thread(target=read_lines, daemon=True).start()
     mon = ConveyorMonitor()
-    emitted = 0
-    for line in sys.stdin:
-        line = line.strip()
-        if not line:
-            continue
+    print(json.dumps({"type": "worker_ready"}), flush=True)
+    last_quality = None
+    while True:
         try:
-            obs = json.loads(line)
-        except json.JSONDecodeError as exc:
-            print(json.dumps({"error": "bad json", "detail": str(exc)}), flush=True)
-            continue
-        try:
-            v = mon.push(obs)
-        except ValueError as exc:
-            print(json.dumps({"error": "bad observation", "detail": str(exc)}), flush=True)
-            continue
-        if v is not None:
-            emitted += 1
-            print(json.dumps(v), flush=True)
-    if emitted == 0:
-        print(json.dumps({
-            "info": "no complete window was formed",
-            "needed": "at least %d frames per sensor spanning >= %.1f s of a %.0f s window"
-                      % (mon.min_frames, mon.min_coverage * mon.window_s, mon.window_s),
-        }), flush=True)
+            line = lines.get(timeout=1)
+        except queue.Empty:
+            line = ""
+        if line is None:
+            # EOF is an explicit recording end, bounded by the last observed frame.
+            for verdict in mon.finish_segment():
+                print(json.dumps(verdict, allow_nan=False), flush=True)
+            print(json.dumps({"type": "data_quality", "status": "DATA_UNAVAILABLE",
+                              "reason": "input stream closed", "anomaly_score": None,
+                              "health_score": None}), flush=True)
+            break
+        if line.strip():
+            try:
+                obs = json.loads(line)
+                if isinstance(obs, dict) and obs.get("control") == "invalidate":
+                    mon.reset()
+                    mon.stream.invalidate(str(obs.get("reason", "acquisition interrupted")))
+                    print(json.dumps(mon.data_status()), flush=True)
+                    continue
+                v = mon.push(obs)
+            except (ValueError, TypeError) as exc:
+                mon.stream.invalidate(str(exc))
+                print(json.dumps(mon.data_status()), flush=True)
+                continue
+            for verdict in ([v] if v is not None else []) + mon.drain():
+                print(json.dumps(verdict, allow_nan=False), flush=True)
+        quality = mon.data_status(int(time.time() * 1000))
+        signature = quality["status"], quality["reason"]
+        if signature != last_quality:
+            print(json.dumps(quality), flush=True)
+            last_quality = signature
 
 
 def main(argv=None):

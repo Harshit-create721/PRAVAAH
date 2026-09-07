@@ -18,6 +18,7 @@ import numpy as np
 import pandas as pd
 
 import config as C
+import data_contract as dc
 
 
 @dataclass
@@ -41,13 +42,32 @@ META_COLS = {
 
 def load_raw(path=None) -> pd.DataFrame:
     path = path or C.resolve_telemetry_path()
+    dc.verify_recording(path)
     df = pd.read_csv(path)
     for col in (C.TIME_COL, C.NODE_COL, C.SEGMENT_COL):
         if col not in df.columns:
             raise ValueError("telemetry.csv is missing required column '%s'" % col)
-    df[C.TIME_COL] = df[C.TIME_COL].astype("int64")
+    df[C.TIME_COL] = [dc.integer(v, C.TIME_COL) for v in df[C.TIME_COL]]
     if C.RECV_TIME_COL in df.columns:
         df[C.RECV_TIME_COL] = df[C.RECV_TIME_COL].astype("int64")
+    previous = {}
+    for row in df.to_dict("records"):
+        node, seg = row[C.NODE_COL], row[C.SEGMENT_COL]
+        if node not in C.EXPECTED_NODES or pd.isna(seg):
+            raise ValueError("recording contains an unknown node or missing segment_id")
+        # Sparse CSV columns owned by the other nodes are absent, not zero.
+        obs = {k: v for k, v in row.items() if pd.notna(v)}
+        dc.validate_measurements(obs, C.EXPECTED_NODES[node])
+        ts = row[C.TIME_COL]
+        seq = dc.integer(obs["seq"], "seq") if "seq" in obs else None
+        key = (seg, node)
+        if key in previous:
+            last_ts, last_seq = previous[key]
+            if ts < last_ts or ts - last_ts > dc.MAX_GAP_MS:
+                raise ValueError(f"discontinuous timestamps within segment {seg}: {node}")
+            if seq is not None and last_seq is not None and seq != (last_seq + 1) % 2**32:
+                raise ValueError(f"discontinuous sequence within segment {seg}: {node}")
+        previous[key] = ts, seq
     # Stable ordering: time first, then original file order to break burst ties.
     order = [C.TIME_COL]
     if "source_csv_row" in df.columns:
@@ -114,7 +134,7 @@ def detect_sensor_mapping(df: pd.DataFrame):
 def find_redundant_signals(df: pd.DataFrame, signals: list) -> list:
     """Flag columns that are an exact affine function of another column.
 
-    belt_speed = hall_rpm * 0.02 in this recording: a fixed drum-geometry constant,
+    belt_speed = hall_rpm * 0.02 in this recording: the 1.20 m full belt loop / 60,
     not an independent measurement. Keeping both would double-weight one sensor.
     """
     found = []
@@ -146,7 +166,7 @@ def find_redundant_signals(df: pd.DataFrame, signals: list) -> list:
     return found
 
 
-def build_segment_table(df: pd.DataFrame) -> pd.DataFrame:
+def build_segment_table(df: pd.DataFrame, path=None) -> pd.DataFrame:
     """Per-segment boundaries measured from the CSV, cross-checked with segments.json."""
     g = df.groupby(C.SEGMENT_COL)
     seg = pd.DataFrame({
@@ -159,7 +179,7 @@ def build_segment_table(df: pd.DataFrame) -> pd.DataFrame:
     seg = seg.sort_values("start_ms").reset_index(drop=True)
     seg["order"] = np.arange(len(seg))
 
-    sidecar = C.load_sidecar("segments.json")
+    sidecar = C.load_sidecar("segments.json", path)
     if sidecar:
         ref = {s["segment_id"]: s for s in sidecar}
         seg["sidecar_duration_s"] = [
@@ -194,7 +214,7 @@ def preprocess(path=None) -> SensorStreams:
             sub = pd.concat([streams[role], sub], ignore_index=True)
         streams[role] = sub.sort_values(C.TIME_COL, kind="mergesort").reset_index(drop=True)
 
-    segments = build_segment_table(raw)
+    segments = build_segment_table(raw, path)
 
     validation = {
         "expected_nodes_present": sorted(set(C.EXPECTED_NODES) & set(node_to_sensor)),

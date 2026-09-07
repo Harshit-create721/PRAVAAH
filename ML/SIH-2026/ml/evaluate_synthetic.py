@@ -1,7 +1,7 @@
 """Sensitivity test: how large a deviation must be before the deployed detector reacts.
 
 This is the *legitimate* use of the synthetic data. The Isolation Forest in
-`models/isolation_forest.joblib` was fitted only on real operator-attested normal
+`models/isolation_forest.joblib` was fitted only on real unlabelled operating-baseline
 windows -- it has never seen a single injection recipe. So scoring it on injected faults
 is not circular: it genuinely measures the detector's response curve.
 
@@ -143,7 +143,7 @@ def render_markdown(curve, floors, phys, audit, thresholds, n_rows) -> str:
              "recorded, so none of those assumptions has been checked against reality. "
              "Class names below denote **shapes of deviation**, not diagnosed fault modes.\n")
     L.append("What makes this test meaningful at all: the Isolation Forest was fitted only "
-             "on real operator-attested normal windows and has **never seen an injection "
+             "on real unlabelled operating-baseline windows and has **never seen an injection "
              "recipe**. Its response to these deviations is therefore a genuine property of "
              "the detector, in a way that a classifier trained on the same recipes could "
              "never be (see `outputs/supervised_model_report.md`).\n")
@@ -172,9 +172,9 @@ def render_markdown(curve, floors, phys, audit, thresholds, n_rows) -> str:
     L.append("")
     base = curve[(curve.fault_class == "NORMAL")]
     if len(base):
-        L.append("The NORMAL row is the false-alarm rate on real attested-normal data: "
+        L.append("The NORMAL row is the in-fit threshold exceedance on the real unlabelled baseline: "
                  "**%.1f%% reach WATCH**. Every detection rate below should be read "
-                 "against that floor.\n" % base.pct_flagged_watch.iloc[0])
+                 "against that reference. These same windows fitted the model and its p90 threshold; this is not a measured false-positive rate, and NORMAL is an injection label, not a verified health label.\n" % base.pct_flagged_watch.iloc[0])
 
     L.append("## 3. Detection floor\n")
     L.append("Lowest injected severity at which at least 80% of windows reach WATCH:\n")

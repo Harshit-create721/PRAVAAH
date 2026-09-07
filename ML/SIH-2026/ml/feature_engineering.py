@@ -17,18 +17,14 @@ import pandas as pd
 from scipy import stats
 
 import config as C
+import data_contract as dc
 
 
 # --------------------------------------------------------------------------------------
-# Low-level statistic helpers. Every one is total: it returns a finite float for any
-# input, so a degenerate window can never inject NaN/inf into the model.
+# Low-level statistic helpers. Missing/non-finite input is an error, never a zero.
 # --------------------------------------------------------------------------------------
-def _f(x, default=0.0) -> float:
-    try:
-        v = float(x)
-    except (TypeError, ValueError):
-        return float(default)
-    return v if np.isfinite(v) else float(default)
+def _f(x) -> float:
+    return dc.number(x, "computed feature")
 
 
 def _slope_per_s(values: np.ndarray, times_s: np.ndarray) -> float:
@@ -45,11 +41,8 @@ def _slope_per_s(values: np.ndarray, times_s: np.ndarray) -> float:
 def basic_stats(prefix: str, v: np.ndarray) -> dict:
     """mean/std/rms/min/max/range/median/p25/p75/kurtosis/crest for one signal."""
     v = np.asarray(v, dtype=float)
-    v = v[np.isfinite(v)]
-    if v.size == 0:
-        keys = ["mean", "std", "rms", "min", "max", "range", "median",
-                "p25", "p75", "kurtosis", "crest_factor"]
-        return {"%s_%s" % (prefix, k): 0.0 for k in keys}
+    if v.size == 0 or not np.isfinite(v).all():
+        raise ValueError("empty or non-finite signal: " + prefix)
     rms = float(np.sqrt(np.mean(v ** 2)))
     kurt = stats.kurtosis(v, fisher=True, bias=False) if v.size > 3 and v.std() > C.EPS else 0.0
     return {
@@ -70,10 +63,8 @@ def basic_stats(prefix: str, v: np.ndarray) -> dict:
 def compact_stats(prefix: str, v: np.ndarray) -> dict:
     """mean/std/min/max/range -- for signals where the full 11-stat block is overkill."""
     v = np.asarray(v, dtype=float)
-    v = v[np.isfinite(v)]
-    if v.size == 0:
-        return {"%s_%s" % (prefix, k): 0.0
-                for k in ["mean", "std", "min", "max", "range"]}
+    if v.size == 0 or not np.isfinite(v).all():
+        raise ValueError("empty or non-finite signal: " + prefix)
     return {
         "%s_mean" % prefix: _f(v.mean()),
         "%s_std" % prefix: _f(v.std(ddof=1) if v.size > 1 else 0.0),
@@ -94,6 +85,8 @@ def enumerate_windows(segments: pd.DataFrame,
     step_s = C.STEP_SECONDS if step_s is None else step_s
     w_ms = int(round(window_s * 1000))
     s_ms = int(round(step_s * 1000))
+    if w_ms <= 0 or s_ms <= 0:
+        raise ValueError("window and step must be positive")
     out = []
     for row in segments.itertuples(index=False):
         t = int(row.start_ms)
@@ -126,6 +119,11 @@ def window_is_valid(parts: dict, window_s: float,
         if d is None or len(d) < min_frames:
             return False, "insufficient_frames:%s" % role
         t = d[C.TIME_COL].to_numpy()
+        if not np.isfinite(t).all() or (np.diff(t) < 0).any() or (np.diff(t) > dc.MAX_GAP_MS).any():
+            return False, "discontinuous_timestamps:%s" % role
+        cols = dc.REQUIRED[role]
+        if not set(cols).issubset(d.columns) or not np.isfinite(d[cols].to_numpy(float)).all():
+            return False, "invalid_measurements:%s" % role
         if (t.max() - t.min()) / 1000.0 < min_coverage * window_s:
             return False, "insufficient_time_coverage:%s" % role
     return True, "ok"
@@ -144,6 +142,10 @@ def compute_window_features(vib: pd.DataFrame,
     without going through the file-based pipeline.
     """
     window_s = C.WINDOW_SECONDS if window_s is None else window_s
+    for role, d in (("vibration", vib), ("thermal", thermal), ("speed", speed)):
+        cols = dc.REQUIRED[role] + [C.TIME_COL]
+        if d.empty or not set(cols).issubset(d.columns) or not np.isfinite(d[cols].to_numpy(float)).all():
+            raise ValueError("invalid feature input: " + role)
     f = {}
 
     # ---------------- vibration ----------------

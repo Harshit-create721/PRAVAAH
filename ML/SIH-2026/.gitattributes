@@ -1,0 +1,2 @@
+# These bundles have byte-level provenance. Preserve original line endings.
+data/** -text

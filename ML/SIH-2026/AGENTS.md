@@ -17,7 +17,7 @@ rig (vibration, thermal, Hall speed). It fuses the three sensor streams into 10-
 windows, learns the baseline operating behaviour with an Isolation Forest ensemble, and
 scores each new window 0–100 for how unusual it is, with a plain-language explanation of
 which sensor drove the score. It also contains a **simulated**-fault test bench and a
-supervised classifier scaffold that is not yet trained on anything real.
+supervised classifier scaffold trained on generated fault labels derived from real sensor measurements; it has no verified real fault labels.
 
 Parent project: **PRAVAAH**, built against **SIH26008, Ministry of Steel — *AI-Enabled
 Conveyor Belt Joint Rupture and Damage Prediction***.
@@ -29,9 +29,7 @@ Conveyor Belt Joint Rupture and Damage Prediction***.
 **This project is built to be scientifically honest, and that is a feature, not
 timidity.** The parent repo's README sets the same standard:
 
-> *"This dashboard displays measurements and nothing else. There is no demo data, no
-> seeded history, no placeholder readings... If you see a number on screen, a sensor
-> produced it."*
+> *"Sensor channels display actual measurements. There is no demo data, no seeded history, no placeholder readings."*
 
 Concretely, in this directory:
 
@@ -41,8 +39,8 @@ Concretely, in this directory:
 | Describe `anomaly_score` as a probability of failure | It is a bounded unusualness score relative to a learned baseline. Calibrating it to failure probability needs run-to-failure data that does not exist. |
 | Emit remaining-useful-life or "X days until failure" | Same reason. RUL needs components taken to actual failure, repeatedly, with failure times recorded. |
 | Name a mechanical fault mode ("bearing failure", "splice tear") | Nothing in the data supports a diagnosis. The system says *"elevated vibration anomaly detected; possible mechanical abnormality"*. |
-| Call the baseline "healthy" | It is **operator-attested normal**: the operator observed normal running, nobody inspected bearings, belt or splice. Early-stage degradation would be invisible to observation and is baked into the baseline. |
-| Present the classifier's 0.973 macro-F1 as fault-detection skill | It measures recovery of hand-written injection recipes. It is circular by construction. |
+| Call the baseline "healthy" | It is **real, unlabelled operating data**: the operator reported the belt running; no verified health or fault labels were recorded. Early-stage degradation would be invisible to observation and is baked into the baseline. |
+| Present the classifier's recipe-recovery macro-F1 as fault-detection skill | It measures recovery of hand-written injection recipes. It is circular by construction. |
 
 If you are asked to produce any of the above, say plainly what the data can and cannot
 support, then deliver the closest defensible thing. The sensitivity specification in
@@ -158,7 +156,7 @@ A thermal excursion at 9.7–13.2 °C over ambient — far outside the 6.75 °C 
 maximum — reached WATCH in barely half of windows, while a 1.33× vibration rise flagged
 98.7%. Cause: **feature dilution**, since 40 of 59 features are vibration and random
 splits rarely landed on the channel that moved. The ensemble raised thermal detection
-from **54.7% → 92.7% at an unchanged 10.2% false-alarm rate**.
+from **54.7% → 92.7% in the historical comparison**. Current sensitivity values are regenerated in `outputs/synthetic_fault_report.md`. The 10.2% in-fit exceedance is not a false-positive rate.
 
 If you add features, **check the group balance** — adding 20 more vibration features
 would reintroduce the same dilution inside the vibration sub-detector.
@@ -172,14 +170,14 @@ constants. Do not "tune" it expecting the score to change.
 ## 7. The honest headline numbers
 
 Use these instead of inventing accuracy figures. Detection floors at a **10.2%
-false-alarm rate on real normal data** (`outputs/synthetic_fault_report.md`):
+in-fit baseline threshold exceedance** (`outputs/synthetic_fault_report.md`):
 
 | simulated deviation shape | reliably flagged from |
 |---|---|
 | HIGH_VIBRATION | vibration ×1.37 |
 | BELT_SLIP | vibration ×1.09, RPM −2.7%, RPM std ×1.7 |
 | RPM_INSTABILITY | vibration ×1.05, RPM std ×2.9 |
-| OVERHEATING | only +6.5 °C over ambient — the weak channel |
+| OVERHEATING | +4.8 °C object-minus-sensor-package change (current simulation) |
 
 Say *"the detector responds to a 1.37× vibration rise"* (measured, defensible). Do **not**
 say *"97% accuracy detecting belt slip"* — that grades an injection recipe against itself.
@@ -202,6 +200,16 @@ say *"97% accuracy detecting belt slip"* — that grades an injection recipe aga
 7. All fault data is simulated (§2).
 
 ---
+
+## Live correctness requirements
+
+- Validate raw frames with `data_contract.py`; never replace invalid values with zero.
+- Keep offline and streaming window geometry identical. Check all 225 real emitted windows.
+- Preserve no-cross-gap windows even without caller-provided segment IDs. Poll freshness during silence.
+- Fit data-dependent pruning/scaling/class weights inside every diagnostic training fold.
+- Verify all recording checksums before importing; `.gitattributes` preserves original CRLF bytes.
+- Run `python -m unittest discover -s tests -v` plus the full pipeline after changes.
+- Parent gateway worker and mobile tests cover the live adapter and stale-score rendering.
 
 ## 9. Working here
 
@@ -234,18 +242,20 @@ Not more modelling — **more data**. In priority order:
 
 `data/<recording>/telemetry.frames.jsonl` carries per-frame diagnostics the CSV drops:
 `samples`, `odr_hz`, `read_errors`, `invalid_samples`, `fifo_overruns`, and the Hall
-counters. **The pipeline currently ignores all of them.** Their deltas would make good
-window-validity gates. Firmware is **0.2.2 throughout**, so the 0.2.1 speed-quarantine
+counters. Live input rejects invalid health and insufficient acquired sample counts;
+sequence discontinuities and stale Hall health also invalidate windows. Cumulative error
+counter deltas are not yet used as window features. Firmware is **0.2.2 throughout**, so the 0.2.1 speed-quarantine
 warning in `docs/dataset-schema.md` does not apply to this recording.
 
 ---
 
 ## 10. Relationship to the rest of PRAVAAH
 
-This directory is **self-contained and read-only with respect to the parent repo**. It
-imports nothing from `server/`, `edge/`, `firmware/` or `web/`, and nothing outside `ML/`
-depends on it. To integrate, have the gateway feed frames to
-`predict.ConveyorMonitor.push()` and publish the returned JSON.
+The Python pipeline is self-contained and imports no parent application code. The parent
+`server/ml-worker.js` now launches `predict.py --stdin`, feeds raw live MQTT frames, and
+exposes `conveyors[].ml` in snapshots for the dashboard and app. It uses only the baseline
+model, never generated fault classifications. Keep this field separate from measured
+channels and rule-layer risk. See README for readiness, watchdog and environment setup.
 
 Authoritative upstream docs — **prefer these over re-deriving**:
 

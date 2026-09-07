@@ -8,6 +8,11 @@ For the three-sensor USB rig, start with the [dataset collection plan](docs/data
 and [verified sensor fixes](docs/sensor-debugging.md). The configured speed reference
 is one magnet on a **1.20 m full belt loop**; it measures belt RPM, not motor RPM.
 
+The [React Native mobile app](mobile/README.md) lives in `mobile/`. It connects
+to the existing relay for live readings, alarms, trends and sensor-node health,
+with Android background monitoring and authenticated maintenance actions.
+Run `cd mobile && npm ci && npm run android`, or `npm run web` for a read-only preview.
+
 Built against SIH26008, Ministry of Steel — *AI-Enabled Conveyor Belt Joint
 Rupture and Damage Prediction*. The problem statement is a steel-plant one;
 the deployment target is a mine, where the same belt carries abrasive ROM
@@ -20,12 +25,12 @@ through more dust, more water and longer distances between inspections.
 > would mean reflashing every node already programmed, for no gain. PRAVAAH is
 > what the product is called; `beltguard` is what the wire is called.
 
-**This dashboard displays measurements and nothing else.** There is no demo
+**Sensor channels display actual measurements.** There is no demo
 data, no seeded history, no placeholder readings. A channel nobody has
 published shows `NO SIGNAL`. A rule that lacks its inputs is listed under
 *Not yet connected* with the reason. A conveyor that has never sent a packet
-reads `NO DATA`, not `HEALTHY`. If you see a number on screen, a sensor
-produced it.
+reads `NO DATA`, not `HEALTHY`. Derived channels and the separately labelled ML condition
+score are calculated from real sensor measurements; the model score is not failure probability.
 
 ---
 
@@ -615,3 +620,13 @@ beltguard/
 
 **Files to edit:** `server/config.js` (geometry, thresholds) and the top of
 the `.ino` (WiFi, broker, pins, calibration). The rest runs as-is.
+
+
+### Live ML condition monitoring
+
+The gateway can now run the baseline detector in [`ML/SIH-2026`](ML/SIH-2026/README.md)
+on incoming sensor frames. Create its `.venv` using the pinned requirements, then use the
+usual launcher. The dashboard and mobile overview display an **ML condition** card from
+`conveyors[].ml`, with full-window warm-up and stale-data handling. This is deviation from
+the real recorded operating baseline; the generated-fault classifier is not deployed as
+a damage diagnosis. See the [fix verification](docs/ml-fixes-2026-09-07.md).

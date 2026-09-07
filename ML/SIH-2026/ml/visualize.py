@@ -341,7 +341,7 @@ def plot_detection_response():
                     marker="o", ms=5, label=f, zorder=3)
         if col == "pct_flagged_watch":
             ax.axhline(base_rate, color=MUTED, lw=1.2, ls="--", zorder=2)
-            ax.text(0.02, base_rate + 2, "false-alarm floor on real normal data (%.1f%%)"
+            ax.text(0.02, base_rate + 2, "in-fit baseline threshold exceedance (%.1f%%)"
                     % base_rate, fontsize=8, color=MUTED)
             ax.set_ylim(-3, 108)
         else:

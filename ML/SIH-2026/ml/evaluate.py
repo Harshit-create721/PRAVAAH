@@ -35,6 +35,8 @@ from sklearn.svm import OneClassSVM
 
 import config as C
 import health_score as hs
+import feature_engineering as fe
+from train import fit_fold_preprocessor
 
 
 def load_artifacts():
@@ -89,22 +91,24 @@ def score_all(model, scaler, feats, fcfg, thresholds, baseline_stats):
 # --------------------------------------------------------------------------------------
 # Diagnostics
 # --------------------------------------------------------------------------------------
-def segment_grouped_stability(X, groups, params):
+def segment_grouped_stability(frames, groups, params):
     """Fit on 4/5 of the segments, score the held-out fifth. No labels are involved."""
     uniq = np.unique(groups)
     n_splits = min(5, len(uniq))
     gkf = GroupKFold(n_splits=n_splits)
     folds = []
-    for k, (tr, te) in enumerate(gkf.split(X, groups=groups)):
-        m = IsolationForest(**params).fit(X[tr])
-        raw_tr = -m.decision_function(X[tr])
-        raw_te = -m.decision_function(X[te])
+    for k, (tr, te) in enumerate(gkf.split(frames, groups=groups)):
+        X_tr, X_te, names = fit_fold_preprocessor(frames.iloc[tr], frames.iloc[te], fe.feature_columns(frames))
+        m = IsolationForest(**params).fit(X_tr)
+        raw_tr = -m.decision_function(X_tr)
+        raw_te = -m.decision_function(X_te)
         cal = hs.fit_calibration(raw_tr)
         s_tr = hs.raw_to_anomaly_score(raw_tr, cal)
         s_te = hs.raw_to_anomaly_score(raw_te, cal)
         th = hs.fit_thresholds(s_tr)
         folds.append({
             "fold": k,
+            "n_features_fitted_on_training_only": len(names),
             "n_train_windows": int(len(tr)),
             "n_heldout_windows": int(len(te)),
             "n_heldout_segments": int(len(np.unique(groups[te]))),
@@ -117,7 +121,7 @@ def segment_grouped_stability(X, groups, params):
     return folds
 
 
-def chronological_drift(X, feats, params, fraction):
+def chronological_drift(feats, params, fraction):
     """Fit on the earliest `fraction` of segments, score the rest. A drift probe only."""
     seg_order = feats.groupby("segment_id").segment_order.min().sort_values()
     n_train_seg = max(1, int(round(len(seg_order) * fraction)))
@@ -127,9 +131,10 @@ def chronological_drift(X, feats, params, fraction):
     if te.sum() < 5:
         return None
 
-    m = IsolationForest(**params).fit(X[tr])
-    raw_tr = -m.decision_function(X[tr])
-    raw_te = -m.decision_function(X[te])
+    X_tr, X_te, names = fit_fold_preprocessor(feats.loc[tr], feats.loc[te], fe.feature_columns(feats))
+    m = IsolationForest(**params).fit(X_tr)
+    raw_tr = -m.decision_function(X_tr)
+    raw_te = -m.decision_function(X_te)
     cal = hs.fit_calibration(raw_tr)
     s_tr = hs.raw_to_anomaly_score(raw_tr, cal)
     s_te = hs.raw_to_anomaly_score(raw_te, cal)
@@ -143,6 +148,7 @@ def chronological_drift(X, feats, params, fraction):
                        "used to fit, remaining %d segments scored"
                        % (n_train_seg, len(seg_order), 100 * fraction,
                           len(seg_order) - n_train_seg)),
+        "n_features_fitted_on_training_only": len(names),
         "train_segments": sorted(train_segs),
         "eval_segments": sorted(set(feats.segment_id) - train_segs),
         "n_train_windows": int(tr.sum()),
@@ -296,6 +302,10 @@ def render_markdown(ev: dict) -> str:
     L.append("Either way this says nothing about whether those segments were mechanically "
              "healthy -- only about how consistently the model scores them.\n")
 
+    L.append("The grouped and chronological diagnostics below fit feature selection, scaling, "
+             "the joint forest, calibration and thresholds on each training partition only. "
+             "They probe the joint detector, not the full deployed ensemble, and do not "
+             "provide independent field-validation estimates.\n")
     L.append("## 5. Chronological drift diagnostic\n")
     cd = ev["chronological_drift"]
     if cd is None:
@@ -465,10 +475,10 @@ def main():
               hs.load_json(C.MODEL_METADATA_PATH)["model"]["parameters"].items()}
 
     print("[2/6] segment-grouped stability ...")
-    stability = segment_grouped_stability(X, feats.segment_id.to_numpy(), params)
+    stability = segment_grouped_stability(feats, feats.segment_id.to_numpy(), params)
 
     print("[3/6] chronological drift diagnostic ...")
-    drift = chronological_drift(X, feats, params, C.DRIFT_SPLIT_FRACTION)
+    drift = chronological_drift(feats, params, C.DRIFT_SPLIT_FRACTION)
 
     print("[4/6] feature/time confounding ...")
     conf = time_confounding(feats, names)
@@ -477,15 +487,12 @@ def main():
     comparison = compare_models(X, raw)
 
     print("[6/6] verifying train/inference feature parity ...")
-    parity = None
-    try:
-        import predict
-        parity = predict.self_test(verbose=False)
-        print("      max |diff| = %.2e over %d windows (%s)"
-              % (parity["max_abs_diff"], parity["n_windows_checked"],
-                 "PASS" if parity["passed"] else "FAIL"))
-    except Exception as exc:
-        print("      parity check unavailable: %s" % exc)
+    import predict
+    parity = predict.self_test(verbose=False)
+    if not parity["passed"]:
+        raise RuntimeError("streaming feature/score/boundary parity failed")
+    print("      max |diff| = %.2e over %d windows (PASS)"
+          % (parity["max_abs_diff"], parity["n_windows_checked"]))
 
     print("      writing report ...")
     top = scored.sort_values("anomaly_score", ascending=False).head(10)

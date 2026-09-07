@@ -2,7 +2,7 @@
   "detection_floors": {
     "BELT_SLIP": 0.15,
     "HIGH_VIBRATION": 0.15,
-    "OVERHEATING": 1.0,
+    "OVERHEATING": 0.75,
     "RPM_INSTABILITY": 0.15,
     "COMBINED_FAULT": 0.15
   },
@@ -11,7 +11,7 @@
       "fault_class": "NORMAL",
       "severity": 0.0,
       "n": 225,
-      "median_anomaly_score": 8.8,
+      "median_anomaly_score": 8.4,
       "pct_flagged_watch": 10.2,
       "pct_flagged_warning": 2.2
     },
@@ -19,15 +19,15 @@
       "fault_class": "BELT_SLIP",
       "severity": 0.15,
       "n": 450,
-      "median_anomaly_score": 65.9,
+      "median_anomaly_score": 65.4,
       "pct_flagged_watch": 100.0,
-      "pct_flagged_warning": 68.9
+      "pct_flagged_warning": 61.8
     },
     {
       "fault_class": "BELT_SLIP",
       "severity": 0.3,
       "n": 450,
-      "median_anomaly_score": 78.1,
+      "median_anomaly_score": 81.8,
       "pct_flagged_watch": 100.0,
       "pct_flagged_warning": 100.0
     },
@@ -35,47 +35,47 @@
       "fault_class": "BELT_SLIP",
       "severity": 0.5,
       "n": 450,
-      "median_anomaly_score": 87.2,
+      "median_anomaly_score": 91.2,
       "pct_flagged_watch": 100.0,
       "pct_flagged_warning": 100.0
     },
     {
       "fault_class": "BELT_SLIP",
       "severity": 0.75,
+      "n": 450,
+      "median_anomaly_score": 96.0,
+      "pct_flagged_watch": 100.0,
+      "pct_flagged_warning": 100.0
+    },
+    {
+      "fault_class": "BELT_SLIP",
+      "severity": 1.0,
+      "n": 450,
+      "median_anomaly_score": 98.0,
+      "pct_flagged_watch": 100.0,
+      "pct_flagged_warning": 100.0
+    },
+    {
+      "fault_class": "HIGH_VIBRATION",
+      "severity": 0.15,
+      "n": 450,
+      "median_anomaly_score": 76.0,
+      "pct_flagged_watch": 99.1,
+      "pct_flagged_warning": 79.1
+    },
+    {
+      "fault_class": "HIGH_VIBRATION",
+      "severity": 0.3,
       "n": 450,
       "median_anomaly_score": 94.1,
       "pct_flagged_watch": 100.0,
       "pct_flagged_warning": 100.0
     },
     {
-      "fault_class": "BELT_SLIP",
-      "severity": 1.0,
-      "n": 450,
-      "median_anomaly_score": 96.8,
-      "pct_flagged_watch": 100.0,
-      "pct_flagged_warning": 100.0
-    },
-    {
-      "fault_class": "HIGH_VIBRATION",
-      "severity": 0.15,
-      "n": 450,
-      "median_anomaly_score": 66.4,
-      "pct_flagged_watch": 92.9,
-      "pct_flagged_warning": 61.3
-    },
-    {
-      "fault_class": "HIGH_VIBRATION",
-      "severity": 0.3,
-      "n": 450,
-      "median_anomaly_score": 90.8,
-      "pct_flagged_watch": 100.0,
-      "pct_flagged_warning": 99.3
-    },
-    {
       "fault_class": "HIGH_VIBRATION",
       "severity": 0.5,
       "n": 450,
-      "median_anomaly_score": 95.8,
+      "median_anomaly_score": 97.1,
       "pct_flagged_watch": 100.0,
       "pct_flagged_warning": 100.0
     },
@@ -83,7 +83,7 @@
       "fault_class": "HIGH_VIBRATION",
       "severity": 0.75,
       "n": 450,
-      "median_anomaly_score": 97.5,
+      "median_anomaly_score": 98.2,
       "pct_flagged_watch": 100.0,
       "pct_flagged_warning": 100.0
     },
@@ -91,7 +91,7 @@
       "fault_class": "HIGH_VIBRATION",
       "severity": 1.0,
       "n": 450,
-      "median_anomaly_score": 98.1,
+      "median_anomaly_score": 98.6,
       "pct_flagged_watch": 100.0,
       "pct_flagged_warning": 100.0
     },
@@ -99,57 +99,57 @@
       "fault_class": "OVERHEATING",
       "severity": 0.15,
       "n": 450,
-      "median_anomaly_score": 15.6,
-      "pct_flagged_watch": 13.3,
-      "pct_flagged_warning": 3.1
+      "median_anomaly_score": 21.9,
+      "pct_flagged_watch": 22.2,
+      "pct_flagged_warning": 5.3
     },
     {
       "fault_class": "OVERHEATING",
       "severity": 0.3,
       "n": 450,
-      "median_anomaly_score": 23.4,
-      "pct_flagged_watch": 21.6,
-      "pct_flagged_warning": 4.9
+      "median_anomaly_score": 30.1,
+      "pct_flagged_watch": 42.0,
+      "pct_flagged_warning": 6.9
     },
     {
       "fault_class": "OVERHEATING",
       "severity": 0.5,
       "n": 450,
-      "median_anomaly_score": 32.6,
-      "pct_flagged_watch": 45.6,
-      "pct_flagged_warning": 8.0
+      "median_anomaly_score": 43.6,
+      "pct_flagged_watch": 74.0,
+      "pct_flagged_warning": 18.9
     },
     {
       "fault_class": "OVERHEATING",
       "severity": 0.75,
       "n": 450,
-      "median_anomaly_score": 49.3,
-      "pct_flagged_watch": 76.4,
-      "pct_flagged_warning": 23.6
+      "median_anomaly_score": 61.3,
+      "pct_flagged_watch": 95.1,
+      "pct_flagged_warning": 47.6
     },
     {
       "fault_class": "OVERHEATING",
       "severity": 1.0,
       "n": 450,
-      "median_anomaly_score": 60.8,
-      "pct_flagged_watch": 92.7,
-      "pct_flagged_warning": 50.4
+      "median_anomaly_score": 71.1,
+      "pct_flagged_watch": 99.3,
+      "pct_flagged_warning": 72.0
     },
     {
       "fault_class": "RPM_INSTABILITY",
       "severity": 0.15,
       "n": 450,
-      "median_anomaly_score": 70.2,
-      "pct_flagged_watch": 99.6,
-      "pct_flagged_warning": 93.6
+      "median_anomaly_score": 68.8,
+      "pct_flagged_watch": 99.8,
+      "pct_flagged_warning": 88.2
     },
     {
       "fault_class": "RPM_INSTABILITY",
       "severity": 0.3,
       "n": 450,
-      "median_anomaly_score": 75.1,
+      "median_anomaly_score": 73.4,
       "pct_flagged_watch": 100.0,
-      "pct_flagged_warning": 100.0
+      "pct_flagged_warning": 99.8
     },
     {
       "fault_class": "RPM_INSTABILITY",
@@ -163,7 +163,7 @@
       "fault_class": "RPM_INSTABILITY",
       "severity": 0.75,
       "n": 450,
-      "median_anomaly_score": 79.8,
+      "median_anomaly_score": 83.2,
       "pct_flagged_watch": 100.0,
       "pct_flagged_warning": 100.0
     },
@@ -171,7 +171,7 @@
       "fault_class": "RPM_INSTABILITY",
       "severity": 1.0,
       "n": 450,
-      "median_anomaly_score": 84.5,
+      "median_anomaly_score": 89.6,
       "pct_flagged_watch": 100.0,
       "pct_flagged_warning": 100.0
     },
@@ -179,23 +179,23 @@
       "fault_class": "COMBINED_FAULT",
       "severity": 0.15,
       "n": 450,
-      "median_anomaly_score": 66.5,
-      "pct_flagged_watch": 95.6,
-      "pct_flagged_warning": 64.0
+      "median_anomaly_score": 68.2,
+      "pct_flagged_watch": 97.8,
+      "pct_flagged_warning": 65.3
     },
     {
       "fault_class": "COMBINED_FAULT",
       "severity": 0.3,
       "n": 450,
-      "median_anomaly_score": 79.9,
+      "median_anomaly_score": 85.8,
       "pct_flagged_watch": 100.0,
-      "pct_flagged_warning": 97.3
+      "pct_flagged_warning": 98.2
     },
     {
       "fault_class": "COMBINED_FAULT",
       "severity": 0.5,
       "n": 450,
-      "median_anomaly_score": 91.8,
+      "median_anomaly_score": 94.7,
       "pct_flagged_watch": 100.0,
       "pct_flagged_warning": 100.0
     },
@@ -203,7 +203,7 @@
       "fault_class": "COMBINED_FAULT",
       "severity": 0.75,
       "n": 450,
-      "median_anomaly_score": 95.9,
+      "median_anomaly_score": 97.2,
       "pct_flagged_watch": 100.0,
       "pct_flagged_warning": 100.0
     },
@@ -211,7 +211,7 @@
       "fault_class": "COMBINED_FAULT",
       "severity": 1.0,
       "n": 450,
-      "median_anomaly_score": 97.1,
+      "median_anomaly_score": 98.1,
       "pct_flagged_watch": 100.0,
       "pct_flagged_warning": 100.0
     }

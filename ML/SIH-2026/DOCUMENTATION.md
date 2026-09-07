@@ -4,9 +4,9 @@ Deep reference for `ML/SIH-2026/`. For orientation, the working rules and the ho
 constraints, read [`AGENTS.md`](AGENTS.md) first. For a user-facing overview, see
 [`README.md`](README.md).
 
-Everything here reflects the artifacts currently committed. Regenerate with
-`python ml/run_pipeline.py` (~3.5 min) and these numbers reproduce, because
-`random_state=42` throughout.
+This reference describes the current code and includes clearly marked historical comparisons.
+Regenerate the artifacts with `python ml/run_pipeline.py`. Seeds are fixed at 42, but code,
+dependency and platform changes can change results; use the generated reports for current numbers.
 
 **Contents**
 1. [System overview](#1-system-overview) · 2. [Data](#2-data) ·
@@ -40,7 +40,7 @@ models/  (joint + 3 per-sensor detectors, scaler, calibration, thresholds)
         └─▶ predict.py             → live JSON verdicts
 ```
 
-**Stage timings** (full run 210 s): inspection 3 s, training 74 s (of which ~70 s is the
+**Historical stage timings** (original full run 210 s; current runtime depends on the environment): inspection 3 s, training 74 s (of which ~70 s is the
 parameter sweep), evaluation 50 s, synthetic generation 21 s, sensitivity 1 s, supervised
 21 s, plots 3 s, self-test 44 s.
 
@@ -67,7 +67,7 @@ copy would break that traceability chain.
 | segments | 78 discontinuous intervals |
 | retained | ~1,062 s within a 2,433 s wall-clock span |
 | session | `2026-09-06T17-29-57.647Z-a70e3e55`, conveyor `CV-01` |
-| `label` | `unlabelled` (operator attests normal running) |
+| `label` | `unlabelled` (operator reported running; health condition unverified) |
 | firmware | `pravaah-serial-node 0.2.2` on all 6,527 frames |
 
 The CSV is a **sparse long/wide hybrid**. A thermal row has blank vibration columns —
@@ -109,7 +109,7 @@ slip is by definition motor speed versus belt speed, and only the belt side is m
 | Timestamp collapse | duplicate `(node, ts_ms)` 27% early → 84% late | Expected (arrival time), not a firmware bug. No per-sample timing. |
 | Thermal drift | temperature +5.3 °C over the session, r = 0.96 with time | Absolute temperature encodes *when*. Dominant modelling constraint. |
 | Speed constancy | 20.37–20.69, 29 distinct values, held ~6 frames (~3 s) | Matches the belt-loop period (~2.93 s). One operating point only. |
-| Vibration stationarity | r = 0.045 with time; 0.0672 → 0.0670 g | No degradation trend — consistent with attested-normal running. |
+| Vibration stationarity | r = 0.045 with time; 0.0672 → 0.0670 g | No degradation trend — observed during running, without verified health labels. |
 | Impulsive events | 4 frames with kurtosis > 8 or crest > 4 | **Not periodic** (gaps 1270/190/292 s vs 2.93 s belt loop) → isolated transients, not a repeating splice/roller signature. |
 | Segment fragmentation | median ~8 s; 41 of 78 below 10 s | Those segments yield no ML sample. |
 | Accel thermal bias | `acceleration_magnitude_mean` vs `temp_mean` r = 0.76 | Static channels drift with warm-up, likely MEMS bias. |
@@ -153,7 +153,7 @@ study, not assumed — §8 of `outputs/data_quality_report.md` has the table:
 10 s at 2 Hz gives ~20 frames per sensor, about the minimum for a usable kurtosis or
 percentile estimate; 15 s and 20 s collapse coverage because the median segment is ~8 s.
 
-**Validity gate** — a window is emitted only if every required sensor has ≥ 8 frames
+**Validity gate** — input validation rejects invalid health/non-finite/range values and discontinuities. A full window is emitted only if every required sensor has ≥ 8 frames
 spanning ≥ 60% of the window. 3 of 228 candidates were rejected.
 
 **Independence caveat:** 75% overlap means the 225 windows are correlated. Effective
@@ -202,7 +202,7 @@ Notes:
 
 ### 5.1 The ensemble
 
-Four `IsolationForest`s, all with `n_estimators=600, max_samples=128, contamination=0.02,
+Four `IsolationForest`s, all with `n_estimators=600, max_samples="auto", contamination=0.02,
 random_state=42, n_jobs=-1, bootstrap=False`, on `RobustScaler`-scaled features:
 
 | detector | features | artifact |
@@ -217,7 +217,7 @@ which won. On the real baseline the driver distribution is temperature 85, RPM 6
 vibration 65, joint 6 — i.e. all four contribute, none is vestigial.
 
 **Parameter selection.** `n_estimators` started at the specified 300 and was chosen by a
-segment-grouped 5-fold sweep over `{100,300,600} × {auto,64,128} × {auto,0.02,0.05}`.
+segment-grouped 5-fold sweep with fold-local feature selection/scaling over `{100,300,600} × {auto,64,128} × {auto,0.02,0.05}`.
 With no labels there is no accuracy to optimise, so the criterion is **stability**:
 seed-to-seed Spearman rank agreement of held-out scores (winner 0.955), then how closely
 the held-out outlier rate tracks the in-fit rate (0.027). This measures consistency, not
@@ -266,7 +266,7 @@ Joint-detector constants currently: `raw_median = -0.077047`, `raw_mad_scaled = 
 `z_mid` and `z_scale` are fitted so the **baseline median maps to ~5** and the **baseline
 99th percentile maps to 50**. Hence:
 
-> **A score of 50 means "as unusual as the most unusual 1% of the baseline". It does not
+> **Each detector maps its own baseline p99 raw score to 50. The maximum across detectors is not an ensemble percentile. It does not
 > mean a 50% chance of anything.**
 
 The mapping is monotone and bounded, so extremes saturate toward 100 instead of diverging.
@@ -278,9 +278,9 @@ quote °C, g and RPM instead of scaler units.
 
 | status | threshold | derivation | realised baseline exceedance |
 |---|---|---|---|
-| WATCH | 34.9 | baseline p90 | 10.22% |
-| WARNING | 60.6 | baseline p98 (floor: watch + 2) | 2.22% |
-| CRITICAL | 91.7 | baseline p99.5 (floor: warning + 2) | 0.89% |
+| WATCH | 33.9 | baseline p90 | 10.22% |
+| WARNING | 62.2 | baseline p98 (floor: watch + 2) | 2.22% |
+| CRITICAL | 93.7 | baseline p99.5 (floor: warning + 2) | 0.89% |
 
 Live in `models/thresholds.json` and **retunable without retraining**.
 
@@ -392,7 +392,7 @@ Contains **no** accuracy/precision/recall/F1/ROC/failure-probability/RUL figure.
 
 **Non-circular**, because the unsupervised model was fitted only on real windows and has
 never seen a recipe. Detection floors — lowest severity at which ≥ 80% of windows reach
-WATCH, against a **10.2% false-alarm floor on real normal data**:
+WATCH, against a **10.2% in-fit baseline threshold exceedance**:
 
 | class | floor | physical size |
 |---|---|---|
@@ -400,7 +400,7 @@ WATCH, against a **10.2% false-alarm floor on real normal data**:
 | BELT_SLIP | 0.15 | vibration ×1.09, RPM −2.7%, RPM std ×1.7 |
 | RPM_INSTABILITY | 0.15 | vibration ×1.05, RPM std ×2.9 |
 | COMBINED_FAULT | 0.15 | vibration ×1.19, RPM −0.9%, RPM std ×1.7 |
-| OVERHEATING | 1.00 | +6.5 °C over ambient |
+| OVERHEATING | 0.75 | +4.8 °C object-minus-sensor-package change |
 
 Also audits whether the explanation layer names a sensor the fault was actually injected
 into. **This table is the honest substitute for a demanded accuracy figure.**
@@ -409,58 +409,46 @@ into. **This table is the honest substitute for a demanded accuracy figure.**
 
 | model | macro F1, segment-grouped 5-fold |
 |---|---|
-| RandomForest | 0.966 ± 0.022 |
-| **XGBoost** | **0.973 ± 0.018** |
+| RandomForest | 0.963 ± 0.021 |
+| **XGBoost** | **0.968 ± 0.021** |
 
 **This is circular and must never be quoted as field accuracy.** The classifier recovers
 hand-written recipes it was trained on. Recall is ≈0.95 even at the mildest severity —
 the fingerprint of learning a deterministic transform.
 
 Two further inflations: the class prior is fictional (~50× more fault than normal windows;
-in service normal is >99%), and only invented shapes are present, so a real fault matching
+the real in-service class distribution is unknown), and only invented shapes are present, so a real fault matching
 none of the six labels still gets assigned one.
 
 The split is **segment-grouped** for a hard correctness reason: each real window spawns 51
 synthetic siblings, and a random split would report near-perfect scores from leakage alone.
 
-Its real value is **plumbing** — point it at real labelled runs, switch the grouping key
-to `session_id`, re-run, and the metrics become real.
+Its value is an implementation scaffold. Real fault evaluation additionally needs verified labels,
+compatible feature windows, session-held-out splits and a separately reviewed evaluation protocol.
 
 ---
 
 ## 10. Inference API
 
-```python
-from predict import ConveyorMonitor
+The complete live contract and command examples are maintained in [README.md](README.md#live-input-contract).
+`data_contract.py` validates identity, health, finite measurements, physical ranges and timestamps.
+`streaming.py` maintains synchronized half-open 10 s windows at 2.5 s cadence, closes them on
+an all-sensor watermark and resets on gaps, sequence discontinuities or reversed timestamps.
+The offline finite-recording flush is bounded by the last observed timestamp, never wall time.
 
-monitor = ConveyorMonitor()        # loads models, scaler, config, thresholds
-for frame in esp32_stream():       # one dict per node frame
-    verdict = monitor.push(frame)  # None until a window is available
-    if verdict:
-        publish(verdict)
-```
+`ConveyorMonitor.push()` emits one verdict or `None`; `drain()` retrieves additional closed
+windows. `data_status(now_ms)` expires stale input during silence. Invalid observations raise
+`ValueError` after clearing buffers. The stdin worker emits structured quality states and keeps
+running; its `worker_ready` handshake lets the gateway avoid queueing data while models load.
 
-CLI: `--demo [-n N] [--pick spread|worst|first]`, `--self-test`, `--stdin`,
-`--window-at SECONDS`.
+`server/ml-worker.js` supplies raw MQTT frames to `predict.py --stdin`. Results appear in
+`conveyors[].ml` in gateway/relay snapshots and the web/mobile ML condition cards. Model scores
+are separate from measured channels and rule-layer risk. Unknown/malformed/stale model output
+is unavailable. The simulated fault classifier is not run on the live path.
 
-**Input** — one frame from one node. `ts_ms` required; `segment_id` optional but
-recommended (a change clears buffers so no window spans a boundary).
-
-```json
-{"node":"esp32-thermal-01","ts_ms":1788715800657,"segment_id":"S001",
- "temperature":31.57,"ambient":27.91}
-```
-
-**Output** — see `README.md` for a full example. Fields: `timestamp`, `window_start`,
-`window_seconds`, `conveyor`, `temperature`, `ambient`, `temperature_over_ambient`, `rpm`,
-`vibration_rms`, `vibration_rms_peak`, `anomaly_score`, `health_score`, `status`,
-`driver_sensor`, `detector_scores`, `indicators`, `explanation`, `top_deviations`,
-`frames_used`, `score_meaning`.
-
-**Behaviour** — first verdict after ~10 s of stream, then on roughly every subsequent
-frame. Missing required fields **raise** rather than being zero-filled. A backwards clock
-jump larger than one window resets the buffers. Node names come from
-`feature_config.json`, so a renamed node is never silently misrouted.
+The self-test replays all source frames through `push()` and compares actual output boundaries,
+frame counts, all selected features, rounded scores and statuses for all 225 windows. Missing,
+extra or mismatched windows fail; a broken ingestion path cannot pass on offline features alone.
 
 ---
 
@@ -477,9 +465,9 @@ jump larger than one window resets the buffers. Node names come from
 | 7 | Chronological split kept, but only as a drift diagnostic | Honours the user's request for a time-aware split without misrepresenting it as generalisation. |
 | 8 | `RobustScaler` over `StandardScaler` | Impulsive windows would otherwise compress the scale. |
 | 9 | Sweep on stability, not accuracy | There is no accuracy to optimise without labels. |
-| 10 | Logistic calibration anchored on baseline p50/p99 | Monotone, bounded, and gives "50 = as unusual as the top 1% of baseline" a stateable meaning. |
+| 10 | Logistic calibration anchored on baseline p50/p99 | Monotone, bounded, and anchors each detector separately; the ensemble maximum is not a probability or percentile. |
 | 11 | `baseline_stats` fitted on **unscaled** features | Lets explanations quote °C/g/RPM; MAD-z is affine-invariant so z is unchanged. |
-| 12 | **Per-sensor ensemble** | A single joint forest was a de-facto vibration detector; thermal detection 54.7% → 92.7% at unchanged false-alarm rate. |
+| 12 | **Per-sensor ensemble** | A single joint forest was a de-facto vibration detector; historical run showed thermal response 54.7% → 92.7%; current regenerated sensitivity is in outputs/synthetic_fault_report.md. |
 | 13 | Synthetic injection at frame level with quantisation preserved | Prevents impossible feature combinations and stops a classifier detecting float precision. |
 | 14 | Synthetic never mixed into the baseline | Keeps the sensitivity test non-circular. |
 | 15 | Segment-grouped splits everywhere | 75% window overlap and 51 synthetic siblings per window make random splits leak. |

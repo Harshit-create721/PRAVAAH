@@ -2,7 +2,7 @@
 
 > **This report is a sensitivity test of the deployed anomaly detector, not evidence of fault detection.** The faults are simulated by `ml/synthetic_faults.py`. Each recipe encodes an assumption about how that fault would appear on this rig's three sensors; no faulted conveyor was ever recorded, so none of those assumptions has been checked against reality. Class names below denote **shapes of deviation**, not diagnosed fault modes.
 
-What makes this test meaningful at all: the Isolation Forest was fitted only on real operator-attested normal windows and has **never seen an injection recipe**. Its response to these deviations is therefore a genuine property of the detector, in a way that a classifier trained on the same recipes could never be (see `outputs/supervised_model_report.md`).
+What makes this test meaningful at all: the Isolation Forest was fitted only on real unlabelled operating-baseline windows and has **never seen an injection recipe**. Its response to these deviations is therefore a genuine property of the detector, in a way that a classifier trained on the same recipes could never be (see `outputs/supervised_model_report.md`).
 
 ## 1. What severity actually means physically
 
@@ -38,38 +38,38 @@ Severity is an abstract 0-1 knob. This table is what it produced on the sensors,
 
 ## 2. Detection response curve
 
-Percentage of injected windows that reach each threshold (WATCH 34.9, WARNING 60.6):
+Percentage of injected windows that reach each threshold (WATCH 33.9, WARNING 62.2):
 
 | fault | severity | n | median score | %>=WATCH | %>=WARNING |
 |---|---|---|---|---|---|
-| NORMAL | 0.00 | 225 | 8.8 | 10.2% | 2.2% |
-| BELT_SLIP | 0.15 | 450 | 65.9 | 100.0% | 68.9% |
-| BELT_SLIP | 0.30 | 450 | 78.1 | 100.0% | 100.0% |
-| BELT_SLIP | 0.50 | 450 | 87.2 | 100.0% | 100.0% |
-| BELT_SLIP | 0.75 | 450 | 94.1 | 100.0% | 100.0% |
-| BELT_SLIP | 1.00 | 450 | 96.8 | 100.0% | 100.0% |
-| HIGH_VIBRATION | 0.15 | 450 | 66.4 | 92.9% | 61.3% |
-| HIGH_VIBRATION | 0.30 | 450 | 90.8 | 100.0% | 99.3% |
-| HIGH_VIBRATION | 0.50 | 450 | 95.8 | 100.0% | 100.0% |
-| HIGH_VIBRATION | 0.75 | 450 | 97.5 | 100.0% | 100.0% |
-| HIGH_VIBRATION | 1.00 | 450 | 98.1 | 100.0% | 100.0% |
-| OVERHEATING | 0.15 | 450 | 15.6 | 13.3% | 3.1% |
-| OVERHEATING | 0.30 | 450 | 23.4 | 21.6% | 4.9% |
-| OVERHEATING | 0.50 | 450 | 32.6 | 45.6% | 8.0% |
-| OVERHEATING | 0.75 | 450 | 49.3 | 76.4% | 23.6% |
-| OVERHEATING | 1.00 | 450 | 60.8 | 92.7% | 50.4% |
-| RPM_INSTABILITY | 0.15 | 450 | 70.2 | 99.6% | 93.6% |
-| RPM_INSTABILITY | 0.30 | 450 | 75.1 | 100.0% | 100.0% |
+| NORMAL | 0.00 | 225 | 8.4 | 10.2% | 2.2% |
+| BELT_SLIP | 0.15 | 450 | 65.4 | 100.0% | 61.8% |
+| BELT_SLIP | 0.30 | 450 | 81.8 | 100.0% | 100.0% |
+| BELT_SLIP | 0.50 | 450 | 91.2 | 100.0% | 100.0% |
+| BELT_SLIP | 0.75 | 450 | 96.0 | 100.0% | 100.0% |
+| BELT_SLIP | 1.00 | 450 | 98.0 | 100.0% | 100.0% |
+| HIGH_VIBRATION | 0.15 | 450 | 76.0 | 99.1% | 79.1% |
+| HIGH_VIBRATION | 0.30 | 450 | 94.1 | 100.0% | 100.0% |
+| HIGH_VIBRATION | 0.50 | 450 | 97.1 | 100.0% | 100.0% |
+| HIGH_VIBRATION | 0.75 | 450 | 98.2 | 100.0% | 100.0% |
+| HIGH_VIBRATION | 1.00 | 450 | 98.6 | 100.0% | 100.0% |
+| OVERHEATING | 0.15 | 450 | 21.9 | 22.2% | 5.3% |
+| OVERHEATING | 0.30 | 450 | 30.1 | 42.0% | 6.9% |
+| OVERHEATING | 0.50 | 450 | 43.6 | 74.0% | 18.9% |
+| OVERHEATING | 0.75 | 450 | 61.3 | 95.1% | 47.6% |
+| OVERHEATING | 1.00 | 450 | 71.1 | 99.3% | 72.0% |
+| RPM_INSTABILITY | 0.15 | 450 | 68.8 | 99.8% | 88.2% |
+| RPM_INSTABILITY | 0.30 | 450 | 73.4 | 100.0% | 99.8% |
 | RPM_INSTABILITY | 0.50 | 450 | 76.9 | 100.0% | 100.0% |
-| RPM_INSTABILITY | 0.75 | 450 | 79.8 | 100.0% | 100.0% |
-| RPM_INSTABILITY | 1.00 | 450 | 84.5 | 100.0% | 100.0% |
-| COMBINED_FAULT | 0.15 | 450 | 66.5 | 95.6% | 64.0% |
-| COMBINED_FAULT | 0.30 | 450 | 79.9 | 100.0% | 97.3% |
-| COMBINED_FAULT | 0.50 | 450 | 91.8 | 100.0% | 100.0% |
-| COMBINED_FAULT | 0.75 | 450 | 95.9 | 100.0% | 100.0% |
-| COMBINED_FAULT | 1.00 | 450 | 97.1 | 100.0% | 100.0% |
+| RPM_INSTABILITY | 0.75 | 450 | 83.2 | 100.0% | 100.0% |
+| RPM_INSTABILITY | 1.00 | 450 | 89.6 | 100.0% | 100.0% |
+| COMBINED_FAULT | 0.15 | 450 | 68.2 | 97.8% | 65.3% |
+| COMBINED_FAULT | 0.30 | 450 | 85.8 | 100.0% | 98.2% |
+| COMBINED_FAULT | 0.50 | 450 | 94.7 | 100.0% | 100.0% |
+| COMBINED_FAULT | 0.75 | 450 | 97.2 | 100.0% | 100.0% |
+| COMBINED_FAULT | 1.00 | 450 | 98.1 | 100.0% | 100.0% |
 
-The NORMAL row is the false-alarm rate on real attested-normal data: **10.2% reach WATCH**. Every detection rate below should be read against that floor.
+The NORMAL row is the in-fit threshold exceedance on the real unlabelled baseline: **10.2% reach WATCH**. Every detection rate below should be read against that reference. These same windows fitted the model and its p90 threshold; this is not a measured false-positive rate, and NORMAL is an injection label, not a verified health label.
 
 ## 3. Detection floor
 
@@ -79,7 +79,7 @@ Lowest injected severity at which at least 80% of windows reach WATCH:
 |---|---|---|
 | BELT_SLIP | severity 0.15 | vibration x1.09, RPM -2.7%, RPM std x1.7, +0.2 degC over ambient |
 | HIGH_VIBRATION | severity 0.15 | vibration x1.37 |
-| OVERHEATING | severity 1.00 | +6.5 degC over ambient |
+| OVERHEATING | severity 0.75 | +4.8 degC over ambient |
 | RPM_INSTABILITY | severity 0.15 | vibration x1.05, RPM std x2.9 |
 | COMBINED_FAULT | severity 0.15 | vibration x1.19, RPM -0.9%, RPM std x1.7, +0.4 degC over ambient |
 

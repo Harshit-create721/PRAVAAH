@@ -387,8 +387,9 @@ class ScoreEngine:
 
         models = {"joint": joblib.load(os.path.join(models_dir, "isolation_forest.joblib"))}
         sub_path = os.path.join(models_dir, "sensor_detectors.joblib")
-        if os.path.exists(sub_path):
-            models.update(joblib.load(sub_path))
+        models.update(joblib.load(sub_path))
+        if set(models) != set(fcfg["ensemble"]["detectors"]):
+            raise ValueError("incomplete or mismatched detector ensemble artifacts")
         return cls(models, scaler, fcfg["score_calibration_by_group"], thresholds,
                    fcfg["feature_order"], fcfg["feature_groups"])
 

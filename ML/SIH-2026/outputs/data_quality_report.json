@@ -132,7 +132,7 @@
       "kept": "hall_rpm",
       "dropped": "belt_speed",
       "relation": "belt_speed = 0.0199387 * hall_rpm + 0.00125953",
-      "max_relative_residual": 0.0002625704411796907
+      "max_relative_residual": 0.00026257044117942015
     }
   ],
   "missing_values": {
@@ -503,19 +503,19 @@
   "quantisation": {
     "hall_rpm": {
       "median_hold_frames": 6.0,
-      "mean_hold_frames": 5.674541,
+      "mean_hold_frames": 5.364764,
       "max_hold_frames": 17,
       "distinct_values": 29
     },
     "temperature": {
       "median_hold_frames": 1.0,
-      "mean_hold_frames": 1.014946,
+      "mean_hold_frames": 1.01637,
       "max_hold_frames": 2,
       "distinct_values": 231
     },
     "vibration_rms": {
       "median_hold_frames": 1.0,
-      "mean_hold_frames": 1.005966,
+      "mean_hold_frames": 1.005505,
       "max_hold_frames": 2,
       "distinct_values": 285
     }

@@ -112,16 +112,15 @@ done
 if [ "$BRIDGE" -eq 1 ]; then
   PORTS=$(ls /dev/cu.usbserial* /dev/cu.usbmodem* /dev/cu.SLAB_USBtoUART* /dev/ttyUSB* /dev/ttyACM* 2>/dev/null | wc -l | tr -d ' ')
   if [ "$PORTS" = "0" ]; then
-    echo "  no USB serial ports found - the bridge would have nothing to read."
-    echo "  Plug the ESP32 nodes in and restart, or use --no-bridge."
+    echo "  no USB serial ports found - the bridge will wait for sensor connections."
   else
     echo "  bridging $PORTS USB port(s):"
     ls /dev/cu.usbserial* /dev/cu.usbmodem* /dev/cu.SLAB_USBtoUART* /dev/ttyUSB* /dev/ttyACM* 2>/dev/null \
       | sed 's|^|               |'
     [ "$PORTS" -lt 3 ] && echo "               (expecting 3 nodes - thermal, vibration, marker)"
-    node tools/serial-bridge.js &
-    PIDS+=($!)
   fi
+  node tools/serial-bridge.js &
+  PIDS+=($!)
 fi
 
 # A node needs a few frames before the gateway calls it live. Report what is

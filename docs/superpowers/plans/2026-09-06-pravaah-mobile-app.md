@@ -2,9 +2,12 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-> **STATUS: NOT EXECUTED.** This plan is written and reviewed but no code has been
-> written against it. Plan 1 (the relay) is complete, merged and deployed; this is
-> the client that consumes it.
+> **STATUS: IMPLEMENTED; physical-device acceptance pending.** The client lives
+> in `mobile/`. See [the implementation and verification guide](../../../mobile/README.md)
+> for current run commands, test coverage and protocol corrections. The steps
+> below are retained as the original design plan, not an execution log; no
+> task-by-task commits were made. Background delivery under Doze still requires
+> the physical-device checks in Task 11.
 
 **Goal:** An Android app showing live conveyor state from the PRAVAAH gateway, raising a phone notification the moment a rule breaches, and letting an operator acknowledge and close alarms from the plant floor.
 
@@ -385,7 +388,7 @@ test('malformed frames are ignored, not thrown', () => {
   expect(() => FakeSocket.last.onmessage?.({ data: '{not json' })).not.toThrow();
 });
 
-test('the write token travels as a bearer subprotocol, never in the URL', () => {
+test('the write token travels as an Authorization header, never in the URL', () => {
   const { conn } = setup({ writeToken: 'secret-token' });
   conn.start();
   expect(FakeSocket.last.url).not.toContain('secret-token');
@@ -402,7 +405,7 @@ Key requirements, in the order they matter:
 2. Feed `serverTs` from every message into `clock.observe()` before emitting.
 3. Backoff `Math.min(1000 * 2 ** attempt, 30_000)`, reset `attempt = 0` on open.
 4. `stopped` flag checked on every reconnect path.
-5. React Native's `WebSocket` has no header option; pass the write token as a `Sec-WebSocket-Protocol` value rather than a query parameter, so it never lands in the relay's or Caddy's access log.
+5. React Native's `WebSocket` supports headers in its third constructor argument. Pass `Authorization: Bearer <token>` there. The deployed relay does not implement bearer subprotocol authentication. The browser preview is read-only because browser WebSockets cannot set this header.
 
 - [ ] **Step 4: Run the tests, confirm they pass**
 

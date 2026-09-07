@@ -2,12 +2,12 @@
   "model_name": "conveyor-condition-isolation-forest",
   "task": "Unsupervised conveyor condition/anomaly detection using vibration, temperature and RPM sensor fusion.",
   "not_a_classifier": "This model does not predict fault types, failure probability or remaining useful life. The dataset is unlabelled, so no such claim is supportable.",
-  "training_date_utc": "2026-09-06T22:12:11.139181+00:00",
-  "training_duration_s": 85.54,
+  "training_date_utc": "2026-09-07T06:58:57.834714+00:00",
+  "training_duration_s": 47.41,
   "environment": {
-    "python": "3.14.5",
-    "platform": "Windows-11-10.0.26200-SP0",
-    "numpy": "2.5.2",
+    "python": "3.14.6",
+    "platform": "macOS-26.3-arm64-arm-64bit-Mach-O",
+    "numpy": "2.5.3",
     "pandas": "3.0.5",
     "scikit_learn": "1.9.0"
   },
@@ -25,7 +25,18 @@
     },
     "segments_total": 78,
     "segments_yielding_windows": 37,
-    "retained_seconds": 1061.891
+    "retained_seconds": 1061.891,
+    "verified_sha256": {
+      "README.md": "0d6122a7a37a73469c9ebc3046e8dd5b39b8b06a521bf8d83d1ab531fbd928b8",
+      "clean-recording.py": "9c30893e42455484199296c681d5884a5d6036528da5b8787e75f1bb91d20230",
+      "excluded-intervals.json": "b14f7f9135c243a6e675073dd1f1d3b3f310f99f466e7f90023e06d7e02b23e0",
+      "excluded-rows.csv": "6ce2bfd9a369e987457cb6b4dcfc0555b3b526cc4d7e4c98c4fda864acf40b95",
+      "manifest.json": "647df3300d11d275de3e5056c9db050a0e37b5c9fa4996d3b908a74daaba4988",
+      "segments.json": "c1f4fbcb56bc2c536654dbdf34ed991c33888bd41d22afc349b2422e193f2ebe",
+      "telemetry.csv": "087ad7ac7d801eedb8a11c6a890b9a966baf2f744e3fd0ed8542f25bf4ae18fd",
+      "telemetry.frames.jsonl": "41a79a39ea908b80a2d71835f6915fc1721bd9a33c5ebeb35c33c0d348737a21",
+      "verification.json": "f9d829043e88d68aa0ea843b3a15cb3fab2dffe6950fddae49f9a350c64ef92e"
+    }
   },
   "windows": {
     "n_windows": 225,
@@ -172,7 +183,7 @@
     "algorithm": "sklearn.ensemble.IsolationForest",
     "parameters": {
       "n_estimators": 600,
-      "max_samples": 128,
+      "max_samples": "auto",
       "contamination": 0.02,
       "random_state": 42,
       "n_jobs": -1,
@@ -186,18 +197,8 @@
       "n_jobs": -1,
       "bootstrap": false
     },
-    "parameter_selection": "segment-grouped 5-fold stability sweep; see parameter_sweep_top below",
+    "parameter_selection": "segment-grouped 5-fold stability sweep with fold-local selection/scaling; see parameter_sweep_top below",
     "parameter_sweep_top": [
-      {
-        "params": {
-          "n_estimators": 600,
-          "max_samples": 128,
-          "contamination": 0.02
-        },
-        "mean_abs_outlier_rate_gap": 0.0267,
-        "seed_rank_stability_spearman": 0.9549,
-        "folds": 5
-      },
       {
         "params": {
           "n_estimators": 600,
@@ -205,7 +206,7 @@
           "contamination": 0.02
         },
         "mean_abs_outlier_rate_gap": 0.04,
-        "seed_rank_stability_spearman": 0.9515,
+        "seed_rank_stability_spearman": 0.951,
         "folds": 5
       },
       {
@@ -214,8 +215,8 @@
           "max_samples": "auto",
           "contamination": "auto"
         },
-        "mean_abs_outlier_rate_gap": 0.0589,
-        "seed_rank_stability_spearman": 0.9515,
+        "mean_abs_outlier_rate_gap": 0.0522,
+        "seed_rank_stability_spearman": 0.951,
         "folds": 5
       },
       {
@@ -224,18 +225,28 @@
           "max_samples": "auto",
           "contamination": 0.05
         },
-        "mean_abs_outlier_rate_gap": 0.0633,
-        "seed_rank_stability_spearman": 0.9515,
+        "mean_abs_outlier_rate_gap": 0.0722,
+        "seed_rank_stability_spearman": 0.951,
+        "folds": 5
+      },
+      {
+        "params": {
+          "n_estimators": 600,
+          "max_samples": 64,
+          "contamination": 0.02
+        },
+        "mean_abs_outlier_rate_gap": 0.0311,
+        "seed_rank_stability_spearman": 0.936,
         "folds": 5
       },
       {
         "params": {
           "n_estimators": 600,
           "max_samples": 128,
-          "contamination": 0.05
+          "contamination": 0.02
         },
-        "mean_abs_outlier_rate_gap": 0.0633,
-        "seed_rank_stability_spearman": 0.9549,
+        "mean_abs_outlier_rate_gap": 0.0311,
+        "seed_rank_stability_spearman": 0.9424,
         "folds": 5
       }
     ],
@@ -289,21 +300,21 @@
   "scoring": {
     "raw_score": "-IsolationForest.decision_function (higher = more unusual)",
     "calibration": {
-      "raw_median": -0.07704674705011338,
-      "raw_mad_scaled": 0.019800870881555244,
-      "z_mid": 4.830605321031947,
-      "z_scale": 1.6405859843627912,
-      "baseline_raw_p50": -0.07704674705011338,
-      "baseline_raw_p95": -0.014528280015041445,
-      "baseline_raw_p99": 0.018603445191393925,
+      "raw_median": -0.0814867108887471,
+      "raw_mad_scaled": 0.020658353015643654,
+      "z_mid": 4.616259148738109,
+      "z_scale": 1.5677890360101654,
+      "baseline_raw_p50": -0.0814867108887471,
+      "baseline_raw_p95": -0.0146468974669963,
+      "baseline_raw_p99": 0.013877600217579425,
       "baseline_n": 225,
       "note": "anomaly_score = 100 / (1 + exp(-(z - z_mid) / z_scale)) where z = (raw - raw_median) / raw_mad_scaled and raw = -decision_function. 50 corresponds to the baseline 99th percentile of unusualness. This is a relative unusualness scale, not a failure probability."
     },
     "thresholds": {
       "thresholds": {
-        "watch": 34.9,
-        "warning": 60.6,
-        "critical": 91.7
+        "watch": 33.9,
+        "warning": 62.2,
+        "critical": 93.7
       },
       "derivation": {
         "watch": "baseline anomaly-score p90",

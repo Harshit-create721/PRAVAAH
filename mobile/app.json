@@ -1,0 +1,51 @@
+{
+  "expo": {
+    "name": "PRAVAAH",
+    "slug": "pravaah-mobile",
+    "scheme": "pravaah",
+    "version": "1.0.0",
+    "orientation": "default",
+    "userInterfaceStyle": "dark",
+    "backgroundColor": "#080A0D",
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "dev.shubhang.pravaah",
+      "infoPlist": {
+        "NSLocalNetworkUsageDescription": "Connect to your conveyor gateway on the local network.",
+        "NSAppTransportSecurity": {
+          "NSAllowsLocalNetworking": true
+        }
+      }
+    },
+    "android": {
+      "package": "dev.shubhang.pravaah",
+      "predictiveBackGestureEnabled": true,
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#080A0D"
+      }
+    },
+    "web": {
+      "bundler": "metro",
+      "name": "PRAVAAH Field Operations",
+      "favicon": "./assets/icon.png"
+    },
+    "plugins": [
+      "expo-router",
+      "expo-font",
+      "expo-secure-store",
+      [
+        "expo-notifications",
+        {
+          "color": "#E0A03C",
+          "icon": "./assets/notification-icon.png"
+        }
+      ],
+      "./plugins/withMonitoring"
+    ],
+    "experiments": {
+      "typedRoutes": true
+    },
+    "icon": "./assets/icon.png"
+  }
+}

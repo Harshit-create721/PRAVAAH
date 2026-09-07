@@ -1,8 +1,8 @@
 {
   "thresholds": {
-    "watch": 34.9,
-    "warning": 60.6,
-    "critical": 91.7
+    "watch": 33.9,
+    "warning": 62.2,
+    "critical": 93.7
   },
   "derivation": {
     "watch": "baseline anomaly-score p90",

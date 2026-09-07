@@ -59,14 +59,17 @@ META_COLS = {"fault_class", "severity", "synthetic", "source_window_id",
              "segment_id", "segment_order"}
 
 
+from train import prune_features
+
+
 def load_dataset():
     if not os.path.exists(SYNTH_CSV):
         raise SystemExit("run `python synthetic_faults.py` first")
     df = pd.read_csv(SYNTH_CSV)
     fcfg = hs.load_json(C.FEATURE_CONFIG_PATH)
-    # Reuse exactly the feature set the unsupervised model uses, so the two systems stay
-    # comparable and a single feature pipeline serves both.
-    names = fcfg["feature_order"]
+    # Candidate features are defined by the shared computation, without learning
+    # a selected feature list from held-out segments.
+    names = fcfg["candidate_features_before_pruning"]
     return df, names
 
 
@@ -96,21 +99,27 @@ def grouped_cv(df, names, n_splits=5):
 
     counts = pd.Series(y).value_counts()
     weights = {int(k): float(len(y) / (len(counts) * v)) for k, v in counts.items()}
-    sample_w = np.array([weights[i] for i in y])
-
     gkf = GroupKFold(n_splits=min(n_splits, len(np.unique(groups))))
     results = {}
     for model_name, _ in build_models(len(le.classes_), weights).items():
         results[model_name] = {"fold_macro_f1": [], "y_true": [], "y_pred": [], "sev": []}
 
     for fold, (tr, te) in enumerate(gkf.split(X, y, groups=groups)):
-        models = build_models(len(le.classes_), weights)
+        # Select from the original, unmodified baseline rows of the fit groups.
+        # Held-out segments and their injected siblings cannot influence selection.
+        train_baseline = df.iloc[tr].loc[df.iloc[tr].fault_class == "NORMAL"]
+        selected, _ = prune_features(train_baseline, names)
+        X_tr = df.iloc[tr][selected].to_numpy(float)
+        X_te = df.iloc[te][selected].to_numpy(float)
+        counts_tr = pd.Series(y[tr]).value_counts()
+        weights_tr = {int(k): float(len(tr) / (len(counts_tr) * v)) for k, v in counts_tr.items()}
+        models = build_models(len(le.classes_), weights_tr)
         for name, m in models.items():
             if name == "XGBoost":
-                m.fit(X[tr], y[tr], sample_weight=sample_w[tr])
+                m.fit(X_tr, y[tr], sample_weight=np.array([weights_tr[i] for i in y[tr]]))
             else:
-                m.fit(X[tr], y[tr])
-            pred = m.predict(X[te])
+                m.fit(X_tr, y[tr])
+            pred = m.predict(X_te)
             results[name]["fold_macro_f1"].append(float(f1_score(y[te], pred, average="macro")))
             results[name]["y_true"].append(y[te])
             results[name]["y_pred"].append(pred)
@@ -149,11 +158,11 @@ def render_markdown(results, le, cv_meta, importances, per_sev) -> str:
              "detection and must not be presented as one.**\n")
     L.append("Two specific reasons the headline figure is optimistic:\n")
     L.append("1. **The class prior is fictional.** The generation grid made ~50x more "
-             "fault windows than normal ones. In service normal is >99% of traffic, so "
-             "real precision on the fault classes would be far lower.\n"
+             "fault windows than unchanged baseline ones. The real deployment class prior is unknown; "
+             "precision under that prior has not been measured.\n"
              "2. **Only invented deviation shapes are present.** A real fault matching "
              "none of the six labels still gets assigned one of them.\n")
-    L.append("Split: **segment-grouped %d-fold CV**. Each real baseline window spawns 51 "
+    L.append("Split: **segment-grouped %d-fold CV**, with training-fold-only feature selection and class weights. Each real baseline window spawns 51 "
              "synthetic rows, so a random split would place near-identical siblings on "
              "both sides and report near-perfect scores from leakage alone. Grouping by "
              "`segment_id` prevents that.\n" % cv_meta["n_splits"])
@@ -229,6 +238,7 @@ def main():
     results, le, weights = grouped_cv(df, names)
 
     print("[3/4] fitting final models on all data ...")
+    names, _ = prune_features(df.loc[df.fault_class == "NORMAL"], names)
     X = df[names].to_numpy(float)
     y = le.transform(df.fault_class.to_numpy())
     counts = pd.Series(y).value_counts()
@@ -257,9 +267,9 @@ def main():
         "warning": ("Labels are simulated. Reported metrics measure recovery of "
                     "hand-written injection recipes, not real fault detection. Do not "
                     "quote them as field accuracy."),
-        "split": "segment-grouped 5-fold (siblings of one real window never straddle a split)",
+        "split": "segment-grouped 5-fold with fold-local feature selection and class weights (siblings never straddle a split)",
         "class_prior_caveat": ("Generation grid produced ~50x more fault than normal "
-                               "windows; in service normal is >99% of traffic."),
+                               "windows; the real in-service class distribution is unknown."),
         "training_date_utc": started.isoformat(),
         "environment": {"python": platform.python_version(),
                         "xgboost": __import__("xgboost").__version__,
