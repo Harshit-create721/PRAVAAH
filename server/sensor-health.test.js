@@ -28,13 +28,17 @@ test('partial thermal failure invalidates delta and failed register only', () =>
 
 test('upgrading an existing telemetry database preserves old rows and adds actual acceleration/Hall channels', t => {
   const dir = mkdtempSync(join(tmpdir(), 'pravaah-store-'));
-  t.after(() => rmSync(dir, { recursive: true, force: true }));
+  let store;
+  t.after(() => {
+    // Windows cannot remove the WAL files while SQLite still holds them open.
+    store?.close();
+    rmSync(dir, { recursive: true, force: true });
+  });
   const path = join(dir, 'old.db');
   const db = new DatabaseSync(path);
   db.exec('CREATE TABLE telemetry (ts INTEGER, conveyor TEXT, node TEXT, seq INTEGER, temperature REAL); INSERT INTO telemetry VALUES(1700000000000, "CV-01", "ir", 1, 30)'.replaceAll('"', "'"));
   db.close();
-  const store = new Store(path);
-  t.after(() => store.db.close());
+  store = new Store(path);
   const values = { hall_rpm: 34.5, acceleration_x: -0.1, acceleration_y: 0.2, acceleration_z: 0.95, acceleration_magnitude: 1.02 };
   assert.deepEqual(validate({ ts: 1700000001000, ...values }, CHANNELS).values, values);
   store.telemetry(1700000001000, 'CV-01', 'accel', 2, values);

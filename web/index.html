@@ -3,14 +3,16 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>PRAVAAH — conveyor integrity</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&family=Noto+Sans+Devanagari:wght@500;600&family=Saira+Condensed:wght@500;600;700&display=swap" rel="stylesheet">
+<title>PRAVAAH | Conveyor intelligence</title>
+<meta name="theme-color" content="#0b1219">
+<meta name="description" content="Conveyor integrity monitoring, component inspection and sensor intelligence in one operations workspace.">
+<!-- Fonts are served from this gateway: the plant laptop may have no internet. -->
+<link rel="stylesheet" href="/fonts/fonts.css">
 <link rel="stylesheet" href="/style.css">
 </head>
 <body>
 
+<a class="skip-link" href="#overview">Skip to dashboard</a>
 <header class="topbar">
   <div class="brand">
     <!-- A troughed belt seen end-on, loaded, with the material flowing away
@@ -30,46 +32,30 @@
       <div class="brand-sub">Conveyor integrity &middot; <b id="siteLabel">&mdash;</b></div>
     </div>
   </div>
-
-  <nav class="conveyor-tabs" id="conveyorTabs"></nav>
+  <nav class="conveyor-tabs" id="conveyorTabs" aria-label="Select conveyor"></nav>
 
   <div class="link-block">
     <div class="link-item"><span class="dot" id="wsDot"></span><span id="wsLabel">LINK</span></div>
     <div class="link-item"><span class="dot" id="mqttDot"></span><span id="mqttLabel">BROKER</span></div>
+    <button class="ghost-btn sound-btn" id="soundToggle" aria-pressed="true" title="Sound an alert when a new alarm opens or escalates">Sound on</button>
     <div class="clock" id="clock">--:--:--</div>
   </div>
 </header>
 
-<div id="banner" class="banner hidden"></div>
-
-<main class="grid">
-
-  <!-- ROW 1 -------------------------------------------------------------- -->
-  <section class="panel risk-panel" id="riskPanel">
-    <div class="panel-head"><h2>Conveyor state</h2><span class="src" id="riskSource">&mdash;</span></div>
-    <div class="risk-body">
-      <div class="risk-badge" id="riskBadge" data-risk="unknown">
-        <div class="risk-word" id="riskWord">NO DATA</div>
-        <div class="risk-note" id="riskNote">no packet received</div>
-      </div>
-      <dl class="risk-facts">
-        <div><dt>Operating state</dt><dd id="opState">&mdash;</dd></div>
-        <div><dt>Last packet</dt><dd id="lastPacket">never</dd></div>
-        <div><dt>Joints tracked</dt><dd id="jointCount">0</dd></div>
-        <div><dt>Open alarms</dt><dd id="alarmCount">0</dd></div>
-      </dl>
-    </div>
-    <div class="ml-condition">
-      <h3>ML condition <span class="src">recorded baseline</span></h3>
-      <div class="ml-reading"><strong id="mlStatus">Waiting for data</strong><span id="mlScore"></span></div>
-      <p id="mlDetail">Waiting for a full window from all three sensors.</p>
-      <p class="ml-note">Deviation from recorded operation. This score does not estimate failure probability.</p>
-    </div>
+<main class="workspace" id="overview" tabindex="-1">
+  <!-- The verdict comes first: on a 1366x768 projector it must be visible
+       without scrolling past the model. -->
+  <section class="summary-strip" aria-label="Operations at a glance">
+    <article class="summary-card"><span class="summary-label">Asset condition</span><strong id="summaryCondition">Awaiting data</strong><span id="summaryConditionNote">Connecting to the gateway</span></article>
+    <a class="summary-card" href="#channels"><span class="summary-label">Live sensor channels</span><strong id="summaryChannels">&mdash;</strong><span id="summaryChannelsNote">Waiting for measurements</span></a>
+    <a class="summary-card" href="#alarms"><span class="summary-label">Open alarms</span><strong id="summaryAlarms">&mdash;</strong><span id="summaryAlarmsNote">Waiting for alarm records</span></a>
+    <a class="summary-card" href="#components"><span class="summary-label">Monitoring coverage</span><strong id="summaryCoverage">&mdash;</strong><span id="summaryCoverageNote">Components with evaluated rules</span></a>
   </section>
+  <div id="banner" class="banner hidden" role="status"></div>
 
-  <section class="panel schematic-panel">
+  <section class="panel schematic-panel" id="machine">
     <div class="panel-head">
-      <h2>Machine</h2>
+      <h2><span class="panel-number">01</span> Conveyor model</h2>
       <div class="view-btns" role="group" aria-label="Camera position">
         <button data-view="iso" aria-pressed="true">ISO</button>
         <button data-view="side" aria-pressed="false">SIDE</button>
@@ -78,59 +64,115 @@
         <button data-view="tail" aria-pressed="false">TAIL</button>
       </div>
       <button class="ghost-btn" id="viewReset" title="Reset the camera">Reset</button>
-      <span class="src" id="schematicSrc">joints appear as their markers are detected</span>
+      <button class="ghost-btn" id="modelLabels" aria-pressed="true" title="Show or hide model annotations">Labels</button>
+      <button class="ghost-btn" id="modelTextures" aria-pressed="true" title="Show or hide material textures">Textures</button>
+      <button class="ghost-btn" id="modelMotion" aria-pressed="true" title="Pause or resume belt animation; sensor monitoring continues">Pause motion</button>
+      <button class="primary-btn fullscreen-btn" id="modelFullscreen" aria-controls="machine" aria-pressed="false" aria-label="View model in fullscreen">
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="M8 3H3v5m13-5h5v5M3 16v5h5m13-5v5h-5"/></svg><span>Fullscreen</span>
+      </button>
     </div>
 
+    <div class="model-caption"><span id="modelMode">INTERACTIVE ASSET VIEW</span><span class="src" id="schematicSrc">Waiting for component data</span></div>
+    <div class="model-motion" id="motionReadout" data-state="unavailable">
+      <span><i aria-hidden="true"></i><strong id="motionStatus">Waiting for belt speed</strong></span>
+      <span id="motionSource">Motion follows measured belt speed</span>
+    </div>
     <div class="schematic-body">
       <div class="schematic-wrap">
+        <canvas id="schematicCanvas" aria-hidden="true"></canvas>
         <svg id="schematic" viewBox="0 0 872 420" preserveAspectRatio="xMidYMid meet"
-             tabindex="0" role="application"
-             aria-label="3D conveyor model. Drag or use arrow keys to rotate, scroll or +/- to zoom. Tab to reach each part.">
+             tabindex="0" role="group"
+             aria-label="3D conveyor model. Drag or use arrow keys to rotate, scroll or +/- to zoom. Tab to reach each part, then Enter to inspect.">
         </svg>
+        <div class="model-tools" role="group" aria-label="Model zoom"><button id="modelZoomIn" aria-label="Zoom in" title="Zoom in">+</button><button id="modelZoomOut" aria-label="Zoom out" title="Zoom out">&minus;</button></div>
+        <div class="model-empty" id="modelEmpty"><strong>Connecting to your conveyor</strong><span>The asset view will appear when the gateway is available.</span></div>
         <div class="comp-tip" id="compTip" role="status" aria-live="polite"></div>
       </div>
 
-      <aside class="part-col">
-        <div class="pc-head">
-          <span>Component health</span>
-          <span class="src" id="componentSrc">&mdash;</span>
-        </div>
-        <div class="pc-list" id="componentList"></div>
-      </aside>
+
     </div>
 
+    <section class="component-detail" id="componentDetail" aria-label="Selected component" hidden>
+      <div class="panel-head"><h2 id="componentTitle" aria-live="polite">Component details</h2><button class="ghost-btn" id="componentClose">Back to full conveyor</button></div>
+      <div id="componentDetailBody"></div>
+    </section>
+    <div class="viewer-foot"><span>Drag to orbit &middot; Scroll to zoom &middot; Select a part to inspect</span><span>Speed from sensors &middot; Coal flow and rotation are illustrative</span></div>
+    <div id="viewerStatus" class="viewer-status" role="status" aria-live="polite"></div>
     <div class="sch-key">
       <span data-s="healthy">nominal</span>
       <span data-s="observe">approaching limit</span>
       <span data-s="planned_inspection">plan inspection</span>
       <span data-s="urgent_inspection">urgent</span>
+      <span data-s="critical">critical</span>
+      <span data-s="blind">sensor offline</span>
       <span data-s="no_rule">sensed, no rule yet</span>
       <span data-s="unmonitored">unmonitored — no sensor</span>
     </div>
   </section>
 
-  <!-- ROW 2 -------------------------------------------------------------- -->
-  <section class="panel channels-panel">
-    <div class="panel-head"><h2>Live channels</h2><span class="src" id="channelSrc">&mdash;</span></div>
+  <div class="overview-heading">
+    <div><h1>Conveyor intelligence<span class="heading-dot">.</span></h1></div>
+    <div class="asset-context"><span class="eyebrow">SELECTED ASSET</span><strong id="assetName">Connecting to gateway</strong><span id="assetMeta">Waiting for asset configuration</span>
+      <button class="ghost-btn" id="statusReport" title="Open a printable status report of this snapshot">Status report</button></div>
+  </div>
+  <nav class="section-nav" aria-label="Dashboard sections">
+    <a href="#machine">Asset overview</a><a href="#channels">Live signals</a><a href="#trends">Signal history</a><a href="#alarms">Alarms <span id="navAlarmCount">&mdash;</span></a><a href="#components">Components</a><a href="#nodes">Connectivity</a>
+  </nav>
+
+<div class="grid">
+  <div class="dashboard-column">
+
+  <section class="panel risk-panel" id="riskPanel">
+    <div class="panel-head"><h2>Conveyor state</h2><span class="src" id="riskSource">&mdash;</span></div>
+    <div class="risk-body">
+      <div class="risk-badge" id="riskBadge" data-risk="unknown">
+        <div class="risk-word" id="riskWord">NO DATA</div>
+        <div class="risk-note" id="riskNote">no packet received</div>
+      </div>
+    </div>
+  <dl class="risk-facts" aria-label="Conveyor summary">
+    <div><dt>Operating state</dt><dd id="opState">&mdash;</dd></div>
+    <div><dt>Last packet</dt><dd id="lastPacket">never</dd></div>
+    <div><dt>Joints tracked</dt><dd id="jointCount">0</dd></div>
+    <div><dt>Open alarms</dt><dd id="alarmCount">0</dd></div>
+  </dl>
+    <div class="ml-condition">
+      <h3>ML condition <span class="src">recorded baseline</span></h3>
+      <div class="ml-reading"><strong id="mlStatus">Waiting for data</strong><span id="mlScore"></span></div>
+      <p id="mlDetail">Waiting for a full window from all three sensors.</p>
+      <p class="ml-transient" id="mlTransient" hidden></p>
+      <p class="ml-agree" id="mlAgree" hidden></p>
+      <p class="ml-note">Deviation from recorded operation. This score does not estimate failure probability.</p>
+    </div>
+  </section>
+  <section class="panel channels-panel" id="channels">
+    <div class="panel-head"><h2>Live channels</h2><button class="ghost-btn" id="engToggle" aria-pressed="false" title="Show kurtosis, per-axis acceleration and the IR sensor body temperature">Engineering detail</button><span class="src" id="channelSrc">&mdash;</span></div>
     <div id="channelGroups"></div>
   </section>
+  <section class="panel nodes-panel" id="nodes">
+    <div class="panel-head"><h2>Sensor nodes</h2><span class="src" id="nodeSrc">&mdash;</span></div>
+    <div class="node-list" id="nodeList"></div>
+  </section>
+  </div>
+  <div class="dashboard-column">
 
-  <section class="panel trend-panel">
+
+  <section class="panel trend-panel" id="trends">
     <div class="panel-head">
-      <h2>Trend</h2>
-      <select id="trendChannel" class="select"></select>
-      <select id="trendWindow" class="select">
+      <h2>Signal history</h2>
+      <select id="trendChannel" class="select" aria-label="Trend channel"></select>
+      <select id="trendWindow" class="select" aria-label="Trend time window">
         <option value="5">5 min</option>
         <option value="15" selected>15 min</option>
         <option value="60">1 hour</option>
         <option value="360">6 hours</option>
       </select>
+      <button class="ghost-btn" id="exportTrend" disabled title="Download the displayed samples">Export CSV</button>
     </div>
-    <div class="chart-wrap"><canvas id="trendChart"></canvas><div class="chart-empty" id="trendEmpty">No stored samples in this window</div></div>
+    <div class="trend-summary" id="trendSummary" role="status">Select a signal to explore its history.</div>
+    <div class="chart-wrap"><canvas id="trendChart" role="img" aria-label="Sensor history chart; sample summary above and CSV download available"></canvas><div class="chart-empty" id="trendEmpty">No stored samples in this window</div></div>
   </section>
-
-  <!-- ROW 3 -------------------------------------------------------------- -->
-  <section class="panel joints-panel">
+  <section class="panel joints-panel" id="joints">
     <div class="panel-head"><h2>Joints &amp; splices</h2><span class="src" id="jointSrc">&mdash;</span></div>
     <div class="table-scroll">
       <table class="dtable" id="jointTable">
@@ -143,35 +185,70 @@
     </div>
   </section>
 
-  <section class="panel alarms-panel">
-    <div class="panel-head"><h2>Alarms</h2><span class="src" id="alarmSrc">rule layer</span></div>
+  <section class="panel alarms-panel" id="alarms">
+    <div class="panel-head"><h2>Alarms</h2>
+      <div class="seg" role="group" aria-label="Alarm view"><button id="alarmTabOpen" aria-pressed="true">Open</button><button id="alarmTabHistory" aria-pressed="false">History</button></div>
+    </div>
     <div class="alarm-list" id="alarmList"></div>
-  </section>
-
-  <!-- ROW 4 -------------------------------------------------------------- -->
-  <section class="panel nodes-panel">
-    <div class="panel-head"><h2>Sensor nodes</h2><span class="src" id="nodeSrc">&mdash;</span></div>
-    <div class="node-list" id="nodeList"></div>
+    <div class="alarm-list" id="alarmHistory" hidden></div>
   </section>
 
   <section class="panel gaps-panel">
-    <div class="panel-head"><h2>Not yet connected</h2><span class="src">rules that cannot run</span></div>
+    <div class="panel-head"><h2>Monitoring coverage</h2><span class="src">checks waiting for hardware or settings</span></div>
     <div class="gap-list" id="gapList"></div>
   </section>
 
-  <section class="panel ingest-panel">
-    <div class="panel-head"><h2>Ingest</h2><span class="src" id="ingestSrc">&mdash;</span></div>
+  <details class="panel ingest-panel diagnostics">
+    <summary class="panel-head"><h2>Diagnostics</h2><span class="src" id="ingestSrc">&mdash;</span></summary>
     <div class="ingest-body">
       <dl class="ingest-stats" id="ingestStats"></dl>
       <div class="reject-head">Rejected payloads</div>
       <div class="reject-list" id="rejectList"></div>
     </div>
-  </section>
+  </details>
+  </div>
+  <div class="dashboard-column component-column">
 
+      <section class="panel part-col" id="components">
+        <div class="pc-head">
+          <span>Component health</span>
+          <span class="src" id="componentSrc">&mdash;</span>
+        </div>
+        <div class="component-controls"><label for="componentSearch">Find a component</label><input id="componentSearch" type="search" placeholder="Search motor, pulley, belt..." autocomplete="off">
+          <select class="select" id="componentFilter" aria-label="Filter components"><option value="all">All components</option><option value="attention">Needs attention</option><option value="instrumented">Instrumented</option></select>
+          <span id="componentResults" role="status"></span></div>
+        <div class="pc-list" id="componentList"></div>
+      </section>
+  </div>
+</div>
+<footer class="workspace-footer"><span>PRAVAAH <span lang="hi">प्रवाह</span> &nbsp; / &nbsp; Conveyor integrity</span><span>Measurements · Rule-based alerts · Baseline analysis</span></footer>
 </main>
 
+<!-- Acknowledge / close an alarm. Every action records a named person. -->
+<dialog class="alarm-dialog" id="alarmDialog" aria-labelledby="alarmDialogTitle">
+  <form method="dialog" id="alarmForm">
+    <h2 id="alarmDialogTitle">Close alarm</h2>
+    <p class="dialog-sub" id="alarmDialogSub"></p>
+    <label>Your name<input id="alarmWho" required maxlength="60" autocomplete="name"></label>
+    <label id="alarmOutcomeWrap">Inspection finding
+      <select id="alarmOutcome" class="select">
+        <option value="inspected_no_fault">Inspected: no fault found</option>
+        <option value="adjusted">Adjusted (tension, alignment, fixings)</option>
+        <option value="repaired">Repaired</option>
+        <option value="replaced">Part replaced</option>
+        <option value="false_alarm">False alarm: sensor or setting issue</option>
+      </select>
+    </label>
+    <label id="alarmNotesWrap">Notes<textarea id="alarmNotes" rows="3" maxlength="500"></textarea></label>
+    <div class="dialog-actions">
+      <button type="button" class="ghost-btn" id="alarmCancel">Cancel</button>
+      <button type="submit" class="primary-btn" id="alarmSubmit">Close alarm</button>
+    </div>
+  </form>
+</dialog>
+
 <!-- Joint detail drawer -->
-<aside class="drawer" id="drawer" aria-hidden="true">
+<aside class="drawer" id="drawer" role="dialog" aria-modal="true" aria-labelledby="drawerTitle" aria-hidden="true" inert>
   <div class="drawer-head">
     <div>
       <div class="drawer-title" id="drawerTitle">&mdash;</div>
@@ -184,6 +261,7 @@
 <div class="scrim" id="scrim"></div>
 
 <script src="/scene3d.js"></script>
+<script src="/webgl3d.js"></script>
 <script type="module" src="/app.js"></script>
 </body>
 </html>

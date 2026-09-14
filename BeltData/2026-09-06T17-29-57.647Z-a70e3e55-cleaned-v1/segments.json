@@ -1,0 +1,1013 @@
+[
+  {
+    "segment_id": "S001",
+    "start_ms": 1788715800166,
+    "end_ms": 1788715825166,
+    "start_utc": "2026-09-06T17:30:00.166000+00:00",
+    "end_utc": "2026-09-06T17:30:25.166000+00:00",
+    "duration_seconds": 25.0,
+    "rows_by_node": {
+      "esp32-vibration-01": 50,
+      "esp32-thermal-01": 50,
+      "esp32-marker-01": 49
+    }
+  },
+  {
+    "segment_id": "S002",
+    "start_ms": 1788715833666,
+    "end_ms": 1788715860158,
+    "start_utc": "2026-09-06T17:30:33.666000+00:00",
+    "end_utc": "2026-09-06T17:31:00.158000+00:00",
+    "duration_seconds": 26.492,
+    "rows_by_node": {
+      "esp32-marker-01": 53,
+      "esp32-vibration-01": 53,
+      "esp32-thermal-01": 52
+    }
+  },
+  {
+    "segment_id": "S003",
+    "start_ms": 1788716141627,
+    "end_ms": 1788716191519,
+    "start_utc": "2026-09-06T17:35:41.627000+00:00",
+    "end_utc": "2026-09-06T17:36:31.519000+00:00",
+    "duration_seconds": 49.892,
+    "rows_by_node": {
+      "esp32-vibration-01": 100,
+      "esp32-thermal-01": 100,
+      "esp32-marker-01": 99
+    }
+  },
+  {
+    "segment_id": "S004",
+    "start_ms": 1788716200019,
+    "end_ms": 1788716206018,
+    "start_utc": "2026-09-06T17:36:40.019000+00:00",
+    "end_utc": "2026-09-06T17:36:46.018000+00:00",
+    "duration_seconds": 5.999,
+    "rows_by_node": {
+      "esp32-marker-01": 12,
+      "esp32-vibration-01": 12,
+      "esp32-thermal-01": 12
+    }
+  },
+  {
+    "segment_id": "S005",
+    "start_ms": 1788716214520,
+    "end_ms": 1788716288022,
+    "start_utc": "2026-09-06T17:36:54.520000+00:00",
+    "end_utc": "2026-09-06T17:38:08.022000+00:00",
+    "duration_seconds": 73.502,
+    "rows_by_node": {
+      "esp32-marker-01": 147,
+      "esp32-thermal-01": 147,
+      "esp32-vibration-01": 148
+    }
+  },
+  {
+    "segment_id": "S006",
+    "start_ms": 1788716296522,
+    "end_ms": 1788716320022,
+    "start_utc": "2026-09-06T17:38:16.522000+00:00",
+    "end_utc": "2026-09-06T17:38:40.022000+00:00",
+    "duration_seconds": 23.5,
+    "rows_by_node": {
+      "esp32-marker-01": 47,
+      "esp32-thermal-01": 47,
+      "esp32-vibration-01": 48
+    }
+  },
+  {
+    "segment_id": "S007",
+    "start_ms": 1788716329023,
+    "end_ms": 1788716352023,
+    "start_utc": "2026-09-06T17:38:49.023000+00:00",
+    "end_utc": "2026-09-06T17:39:12.023000+00:00",
+    "duration_seconds": 23.0,
+    "rows_by_node": {
+      "esp32-marker-01": 46,
+      "esp32-thermal-01": 46,
+      "esp32-vibration-01": 48
+    }
+  },
+  {
+    "segment_id": "S008",
+    "start_ms": 1788716361024,
+    "end_ms": 1788716384525,
+    "start_utc": "2026-09-06T17:39:21.024000+00:00",
+    "end_utc": "2026-09-06T17:39:44.525000+00:00",
+    "duration_seconds": 23.501,
+    "rows_by_node": {
+      "esp32-marker-01": 47,
+      "esp32-thermal-01": 47,
+      "esp32-vibration-01": 48
+    }
+  },
+  {
+    "segment_id": "S009",
+    "start_ms": 1788716393025,
+    "end_ms": 1788716416526,
+    "start_utc": "2026-09-06T17:39:53.025000+00:00",
+    "end_utc": "2026-09-06T17:40:16.526000+00:00",
+    "duration_seconds": 23.501,
+    "rows_by_node": {
+      "esp32-marker-01": 47,
+      "esp32-thermal-01": 47,
+      "esp32-vibration-01": 46
+    }
+  },
+  {
+    "segment_id": "S010",
+    "start_ms": 1788716425026,
+    "end_ms": 1788716434058,
+    "start_utc": "2026-09-06T17:40:25.026000+00:00",
+    "end_utc": "2026-09-06T17:40:34.058000+00:00",
+    "duration_seconds": 9.032,
+    "rows_by_node": {
+      "esp32-marker-01": 18,
+      "esp32-thermal-01": 18,
+      "esp32-vibration-01": 20
+    }
+  },
+  {
+    "segment_id": "S011",
+    "start_ms": 1788716442527,
+    "end_ms": 1788716472042,
+    "start_utc": "2026-09-06T17:40:42.527000+00:00",
+    "end_utc": "2026-09-06T17:41:12.042000+00:00",
+    "duration_seconds": 29.515,
+    "rows_by_node": {
+      "esp32-marker-01": 59,
+      "esp32-vibration-01": 60,
+      "esp32-thermal-01": 59
+    }
+  },
+  {
+    "segment_id": "S012",
+    "start_ms": 1788716480529,
+    "end_ms": 1788716498530,
+    "start_utc": "2026-09-06T17:41:20.529000+00:00",
+    "end_utc": "2026-09-06T17:41:38.530000+00:00",
+    "duration_seconds": 18.001,
+    "rows_by_node": {
+      "esp32-marker-01": 36,
+      "esp32-thermal-01": 36,
+      "esp32-vibration-01": 36
+    }
+  },
+  {
+    "segment_id": "S013",
+    "start_ms": 1788716507030,
+    "end_ms": 1788716521529,
+    "start_utc": "2026-09-06T17:41:47.030000+00:00",
+    "end_utc": "2026-09-06T17:42:01.529000+00:00",
+    "duration_seconds": 14.499,
+    "rows_by_node": {
+      "esp32-marker-01": 29,
+      "esp32-thermal-01": 29,
+      "esp32-vibration-01": 28
+    }
+  },
+  {
+    "segment_id": "S014",
+    "start_ms": 1788716530529,
+    "end_ms": 1788716554031,
+    "start_utc": "2026-09-06T17:42:10.529000+00:00",
+    "end_utc": "2026-09-06T17:42:34.031000+00:00",
+    "duration_seconds": 23.502,
+    "rows_by_node": {
+      "esp32-marker-01": 47,
+      "esp32-thermal-01": 47,
+      "esp32-vibration-01": 49
+    }
+  },
+  {
+    "segment_id": "S015",
+    "start_ms": 1788716562531,
+    "end_ms": 1788716592031,
+    "start_utc": "2026-09-06T17:42:42.531000+00:00",
+    "end_utc": "2026-09-06T17:43:12.031000+00:00",
+    "duration_seconds": 29.5,
+    "rows_by_node": {
+      "esp32-marker-01": 59,
+      "esp32-vibration-01": 60,
+      "esp32-thermal-01": 59
+    }
+  },
+  {
+    "segment_id": "S016",
+    "start_ms": 1788716600533,
+    "end_ms": 1788716603533,
+    "start_utc": "2026-09-06T17:43:20.533000+00:00",
+    "end_utc": "2026-09-06T17:43:23.533000+00:00",
+    "duration_seconds": 3.0,
+    "rows_by_node": {
+      "esp32-marker-01": 6,
+      "esp32-thermal-01": 6,
+      "esp32-vibration-01": 5
+    }
+  },
+  {
+    "segment_id": "S017",
+    "start_ms": 1788716612032,
+    "end_ms": 1788716659914,
+    "start_utc": "2026-09-06T17:43:32.032000+00:00",
+    "end_utc": "2026-09-06T17:44:19.914000+00:00",
+    "duration_seconds": 47.882,
+    "rows_by_node": {
+      "esp32-marker-01": 96,
+      "esp32-thermal-01": 96,
+      "esp32-vibration-01": 93
+    }
+  },
+  {
+    "segment_id": "S018",
+    "start_ms": 1788716659916,
+    "end_ms": 1788716676535,
+    "start_utc": "2026-09-06T17:44:19.916000+00:00",
+    "end_utc": "2026-09-06T17:44:36.535000+00:00",
+    "duration_seconds": 16.619,
+    "rows_by_node": {
+      "esp32-vibration-01": 34,
+      "esp32-marker-01": 33,
+      "esp32-thermal-01": 33
+    }
+  },
+  {
+    "segment_id": "S019",
+    "start_ms": 1788716685535,
+    "end_ms": 1788716709036,
+    "start_utc": "2026-09-06T17:44:45.535000+00:00",
+    "end_utc": "2026-09-06T17:45:09.036000+00:00",
+    "duration_seconds": 23.501,
+    "rows_by_node": {
+      "esp32-marker-01": 47,
+      "esp32-thermal-01": 47,
+      "esp32-vibration-01": 48
+    }
+  },
+  {
+    "segment_id": "S020",
+    "start_ms": 1788716717536,
+    "end_ms": 1788716732536,
+    "start_utc": "2026-09-06T17:45:17.536000+00:00",
+    "end_utc": "2026-09-06T17:45:32.536000+00:00",
+    "duration_seconds": 15.0,
+    "rows_by_node": {
+      "esp32-marker-01": 30,
+      "esp32-vibration-01": 32,
+      "esp32-thermal-01": 30
+    }
+  },
+  {
+    "segment_id": "S021",
+    "start_ms": 1788716741036,
+    "end_ms": 1788716747906,
+    "start_utc": "2026-09-06T17:45:41.036000+00:00",
+    "end_utc": "2026-09-06T17:45:47.906000+00:00",
+    "duration_seconds": 6.87,
+    "rows_by_node": {
+      "esp32-marker-01": 14,
+      "esp32-thermal-01": 13,
+      "esp32-vibration-01": 15
+    }
+  },
+  {
+    "segment_id": "S022",
+    "start_ms": 1788717368303,
+    "end_ms": 1788717391299,
+    "start_utc": "2026-09-06T17:56:08.303000+00:00",
+    "end_utc": "2026-09-06T17:56:31.299000+00:00",
+    "duration_seconds": 22.996,
+    "rows_by_node": {
+      "esp32-thermal-01": 48,
+      "esp32-vibration-01": 44,
+      "esp32-marker-01": 44
+    }
+  },
+  {
+    "segment_id": "S023",
+    "start_ms": 1788717399351,
+    "end_ms": 1788717413355,
+    "start_utc": "2026-09-06T17:56:39.351000+00:00",
+    "end_utc": "2026-09-06T17:56:53.355000+00:00",
+    "duration_seconds": 14.004,
+    "rows_by_node": {
+      "esp32-vibration-01": 28,
+      "esp32-marker-01": 27,
+      "esp32-thermal-01": 28
+    }
+  },
+  {
+    "segment_id": "S024",
+    "start_ms": 1788717423363,
+    "end_ms": 1788717425360,
+    "start_utc": "2026-09-06T17:57:03.363000+00:00",
+    "end_utc": "2026-09-06T17:57:05.360000+00:00",
+    "duration_seconds": 1.997,
+    "rows_by_node": {
+      "esp32-vibration-01": 5,
+      "esp32-marker-01": 4
+    }
+  },
+  {
+    "segment_id": "S025",
+    "start_ms": 1788717425361,
+    "end_ms": 1788717431321,
+    "start_utc": "2026-09-06T17:57:05.361000+00:00",
+    "end_utc": "2026-09-06T17:57:11.321000+00:00",
+    "duration_seconds": 5.96,
+    "rows_by_node": {
+      "esp32-vibration-01": 11,
+      "esp32-thermal-01": 12,
+      "esp32-marker-01": 10
+    }
+  },
+  {
+    "segment_id": "S026",
+    "start_ms": 1788717439374,
+    "end_ms": 1788717471386,
+    "start_utc": "2026-09-06T17:57:19.374000+00:00",
+    "end_utc": "2026-09-06T17:57:51.386000+00:00",
+    "duration_seconds": 32.012,
+    "rows_by_node": {
+      "esp32-vibration-01": 64,
+      "esp32-thermal-01": 64,
+      "esp32-marker-01": 64
+    }
+  },
+  {
+    "segment_id": "S027",
+    "start_ms": 1788717473391,
+    "end_ms": 1788717485918,
+    "start_utc": "2026-09-06T17:57:53.391000+00:00",
+    "end_utc": "2026-09-06T17:58:05.918000+00:00",
+    "duration_seconds": 12.527,
+    "rows_by_node": {
+      "esp32-vibration-01": 28,
+      "esp32-marker-01": 29,
+      "esp32-thermal-01": 25
+    }
+  },
+  {
+    "segment_id": "S028",
+    "start_ms": 1788717487397,
+    "end_ms": 1788717489401,
+    "start_utc": "2026-09-06T17:58:07.397000+00:00",
+    "end_utc": "2026-09-06T17:58:09.401000+00:00",
+    "duration_seconds": 2.004,
+    "rows_by_node": {
+      "esp32-vibration-01": 5,
+      "esp32-marker-01": 6,
+      "esp32-thermal-01": 6
+    }
+  },
+  {
+    "segment_id": "S029",
+    "start_ms": 1788717489402,
+    "end_ms": 1788717491397,
+    "start_utc": "2026-09-06T17:58:09.402000+00:00",
+    "end_utc": "2026-09-06T17:58:11.397000+00:00",
+    "duration_seconds": 1.995,
+    "rows_by_node": {
+      "esp32-thermal-01": 4,
+      "esp32-marker-01": 4,
+      "esp32-vibration-01": 3
+    }
+  },
+  {
+    "segment_id": "S030",
+    "start_ms": 1788717493400,
+    "end_ms": 1788717527411,
+    "start_utc": "2026-09-06T17:58:13.400000+00:00",
+    "end_utc": "2026-09-06T17:58:47.411000+00:00",
+    "duration_seconds": 34.011,
+    "rows_by_node": {
+      "esp32-vibration-01": 69,
+      "esp32-marker-01": 68,
+      "esp32-thermal-01": 66
+    }
+  },
+  {
+    "segment_id": "S031",
+    "start_ms": 1788717527412,
+    "end_ms": 1788717527413,
+    "start_utc": "2026-09-06T17:58:47.412000+00:00",
+    "end_utc": "2026-09-06T17:58:47.413000+00:00",
+    "duration_seconds": 0.001,
+    "rows_by_node": {
+      "esp32-vibration-01": 1,
+      "esp32-thermal-01": 2
+    }
+  },
+  {
+    "segment_id": "S032",
+    "start_ms": 1788717543424,
+    "end_ms": 1788717545429,
+    "start_utc": "2026-09-06T17:59:03.424000+00:00",
+    "end_utc": "2026-09-06T17:59:05.429000+00:00",
+    "duration_seconds": 2.005,
+    "rows_by_node": {
+      "esp32-marker-01": 6,
+      "esp32-vibration-01": 8,
+      "esp32-thermal-01": 4
+    }
+  },
+  {
+    "segment_id": "S033",
+    "start_ms": 1788717553429,
+    "end_ms": 1788717556342,
+    "start_utc": "2026-09-06T17:59:13.429000+00:00",
+    "end_utc": "2026-09-06T17:59:16.342000+00:00",
+    "duration_seconds": 2.913,
+    "rows_by_node": {
+      "esp32-marker-01": 6,
+      "esp32-vibration-01": 6,
+      "esp32-thermal-01": 6
+    }
+  },
+  {
+    "segment_id": "S034",
+    "start_ms": 1788717557423,
+    "end_ms": 1788717569428,
+    "start_utc": "2026-09-06T17:59:17.423000+00:00",
+    "end_utc": "2026-09-06T17:59:29.428000+00:00",
+    "duration_seconds": 12.005,
+    "rows_by_node": {
+      "esp32-vibration-01": 25,
+      "esp32-marker-01": 22,
+      "esp32-thermal-01": 23
+    }
+  },
+  {
+    "segment_id": "S035",
+    "start_ms": 1788717577434,
+    "end_ms": 1788717585433,
+    "start_utc": "2026-09-06T17:59:37.434000+00:00",
+    "end_utc": "2026-09-06T17:59:45.433000+00:00",
+    "duration_seconds": 7.999,
+    "rows_by_node": {
+      "esp32-marker-01": 14,
+      "esp32-thermal-01": 13,
+      "esp32-vibration-01": 13
+    }
+  },
+  {
+    "segment_id": "S036",
+    "start_ms": 1788717601308,
+    "end_ms": 1788717609453,
+    "start_utc": "2026-09-06T18:00:01.308000+00:00",
+    "end_utc": "2026-09-06T18:00:09.453000+00:00",
+    "duration_seconds": 8.145,
+    "rows_by_node": {
+      "esp32-marker-01": 16,
+      "esp32-vibration-01": 18,
+      "esp32-thermal-01": 20
+    }
+  },
+  {
+    "segment_id": "S037",
+    "start_ms": 1788717619452,
+    "end_ms": 1788717626355,
+    "start_utc": "2026-09-06T18:00:19.452000+00:00",
+    "end_utc": "2026-09-06T18:00:26.355000+00:00",
+    "duration_seconds": 6.903,
+    "rows_by_node": {
+      "esp32-marker-01": 18,
+      "esp32-thermal-01": 16,
+      "esp32-vibration-01": 16
+    }
+  },
+  {
+    "segment_id": "S038",
+    "start_ms": 1788717627456,
+    "end_ms": 1788717641361,
+    "start_utc": "2026-09-06T18:00:27.456000+00:00",
+    "end_utc": "2026-09-06T18:00:41.361000+00:00",
+    "duration_seconds": 13.905,
+    "rows_by_node": {
+      "esp32-vibration-01": 28,
+      "esp32-marker-01": 28,
+      "esp32-thermal-01": 27
+    }
+  },
+  {
+    "segment_id": "S039",
+    "start_ms": 1788717641362,
+    "end_ms": 1788717643469,
+    "start_utc": "2026-09-06T18:00:41.362000+00:00",
+    "end_utc": "2026-09-06T18:00:43.469000+00:00",
+    "duration_seconds": 2.107,
+    "rows_by_node": {
+      "esp32-marker-01": 4,
+      "esp32-vibration-01": 4,
+      "esp32-thermal-01": 4
+    }
+  },
+  {
+    "segment_id": "S040",
+    "start_ms": 1788717645463,
+    "end_ms": 1788717653471,
+    "start_utc": "2026-09-06T18:00:45.463000+00:00",
+    "end_utc": "2026-09-06T18:00:53.471000+00:00",
+    "duration_seconds": 8.008,
+    "rows_by_node": {
+      "esp32-marker-01": 17,
+      "esp32-vibration-01": 18,
+      "esp32-thermal-01": 18
+    }
+  },
+  {
+    "segment_id": "S041",
+    "start_ms": 1788717661321,
+    "end_ms": 1788717665470,
+    "start_utc": "2026-09-06T18:01:01.321000+00:00",
+    "end_utc": "2026-09-06T18:01:05.470000+00:00",
+    "duration_seconds": 4.149,
+    "rows_by_node": {
+      "esp32-thermal-01": 5,
+      "esp32-vibration-01": 5,
+      "esp32-marker-01": 4
+    }
+  },
+  {
+    "segment_id": "S042",
+    "start_ms": 1788717679486,
+    "end_ms": 1788717683480,
+    "start_utc": "2026-09-06T18:01:19.486000+00:00",
+    "end_utc": "2026-09-06T18:01:23.480000+00:00",
+    "duration_seconds": 3.994,
+    "rows_by_node": {
+      "esp32-marker-01": 5,
+      "esp32-thermal-01": 4,
+      "esp32-vibration-01": 4
+    }
+  },
+  {
+    "segment_id": "S043",
+    "start_ms": 1788717691320,
+    "end_ms": 1788717705498,
+    "start_utc": "2026-09-06T18:01:31.320000+00:00",
+    "end_utc": "2026-09-06T18:01:45.498000+00:00",
+    "duration_seconds": 14.178,
+    "rows_by_node": {
+      "esp32-vibration-01": 30,
+      "esp32-marker-01": 28,
+      "esp32-thermal-01": 28
+    }
+  },
+  {
+    "segment_id": "S044",
+    "start_ms": 1788717715499,
+    "end_ms": 1788717723503,
+    "start_utc": "2026-09-06T18:01:55.499000+00:00",
+    "end_utc": "2026-09-06T18:02:03.503000+00:00",
+    "duration_seconds": 8.004,
+    "rows_by_node": {
+      "esp32-vibration-01": 16,
+      "esp32-marker-01": 17,
+      "esp32-thermal-01": 16
+    }
+  },
+  {
+    "segment_id": "S045",
+    "start_ms": 1788717731376,
+    "end_ms": 1788717773521,
+    "start_utc": "2026-09-06T18:02:11.376000+00:00",
+    "end_utc": "2026-09-06T18:02:53.521000+00:00",
+    "duration_seconds": 42.145,
+    "rows_by_node": {
+      "esp32-thermal-01": 81,
+      "esp32-vibration-01": 81,
+      "esp32-marker-01": 81
+    }
+  },
+  {
+    "segment_id": "S046",
+    "start_ms": 1788717773522,
+    "end_ms": 1788717779528,
+    "start_utc": "2026-09-06T18:02:53.522000+00:00",
+    "end_utc": "2026-09-06T18:02:59.528000+00:00",
+    "duration_seconds": 6.006,
+    "rows_by_node": {
+      "esp32-thermal-01": 12,
+      "esp32-marker-01": 11,
+      "esp32-vibration-01": 12
+    }
+  },
+  {
+    "segment_id": "S047",
+    "start_ms": 1788717793539,
+    "end_ms": 1788717795542,
+    "start_utc": "2026-09-06T18:03:13.539000+00:00",
+    "end_utc": "2026-09-06T18:03:15.542000+00:00",
+    "duration_seconds": 2.003,
+    "rows_by_node": {
+      "esp32-marker-01": 4,
+      "esp32-vibration-01": 5,
+      "esp32-thermal-01": 4
+    }
+  },
+  {
+    "segment_id": "S048",
+    "start_ms": 1788717796382,
+    "end_ms": 1788717796384,
+    "start_utc": "2026-09-06T18:03:16.382000+00:00",
+    "end_utc": "2026-09-06T18:03:16.384000+00:00",
+    "duration_seconds": 0.002,
+    "rows_by_node": {
+      "esp32-vibration-01": 1,
+      "esp32-thermal-01": 1
+    }
+  },
+  {
+    "segment_id": "S049",
+    "start_ms": 1788717805539,
+    "end_ms": 1788717819556,
+    "start_utc": "2026-09-06T18:03:25.539000+00:00",
+    "end_utc": "2026-09-06T18:03:39.556000+00:00",
+    "duration_seconds": 14.017,
+    "rows_by_node": {
+      "esp32-vibration-01": 32,
+      "esp32-thermal-01": 32,
+      "esp32-marker-01": 29
+    }
+  },
+  {
+    "segment_id": "S050",
+    "start_ms": 1788717829556,
+    "end_ms": 1788717837558,
+    "start_utc": "2026-09-06T18:03:49.556000+00:00",
+    "end_utc": "2026-09-06T18:03:57.558000+00:00",
+    "duration_seconds": 8.002,
+    "rows_by_node": {
+      "esp32-marker-01": 16,
+      "esp32-vibration-01": 19,
+      "esp32-thermal-01": 16
+    }
+  },
+  {
+    "segment_id": "S051",
+    "start_ms": 1788717845566,
+    "end_ms": 1788717861402,
+    "start_utc": "2026-09-06T18:04:05.566000+00:00",
+    "end_utc": "2026-09-06T18:04:21.402000+00:00",
+    "duration_seconds": 15.836,
+    "rows_by_node": {
+      "esp32-marker-01": 29,
+      "esp32-vibration-01": 30,
+      "esp32-thermal-01": 31
+    }
+  },
+  {
+    "segment_id": "S052",
+    "start_ms": 1788717869581,
+    "end_ms": 1788717871397,
+    "start_utc": "2026-09-06T18:04:29.581000+00:00",
+    "end_utc": "2026-09-06T18:04:31.397000+00:00",
+    "duration_seconds": 1.816,
+    "rows_by_node": {
+      "esp32-marker-01": 6,
+      "esp32-vibration-01": 5,
+      "esp32-thermal-01": 3
+    }
+  },
+  {
+    "segment_id": "S053",
+    "start_ms": 1788717873581,
+    "end_ms": 1788717893584,
+    "start_utc": "2026-09-06T18:04:33.581000+00:00",
+    "end_utc": "2026-09-06T18:04:53.584000+00:00",
+    "duration_seconds": 20.003,
+    "rows_by_node": {
+      "esp32-vibration-01": 40,
+      "esp32-marker-01": 38,
+      "esp32-thermal-01": 36
+    }
+  },
+  {
+    "segment_id": "S054",
+    "start_ms": 1788717893585,
+    "end_ms": 1788717906403,
+    "start_utc": "2026-09-06T18:04:53.585000+00:00",
+    "end_utc": "2026-09-06T18:05:06.403000+00:00",
+    "duration_seconds": 12.818,
+    "rows_by_node": {
+      "esp32-vibration-01": 27,
+      "esp32-thermal-01": 28,
+      "esp32-marker-01": 28
+    }
+  },
+  {
+    "segment_id": "S055",
+    "start_ms": 1788717907596,
+    "end_ms": 1788717913596,
+    "start_utc": "2026-09-06T18:05:07.596000+00:00",
+    "end_utc": "2026-09-06T18:05:13.596000+00:00",
+    "duration_seconds": 6.0,
+    "rows_by_node": {
+      "esp32-vibration-01": 10,
+      "esp32-thermal-01": 11,
+      "esp32-marker-01": 8
+    }
+  },
+  {
+    "segment_id": "S056",
+    "start_ms": 1788717913602,
+    "end_ms": 1788717919601,
+    "start_utc": "2026-09-06T18:05:13.602000+00:00",
+    "end_utc": "2026-09-06T18:05:19.601000+00:00",
+    "duration_seconds": 5.999,
+    "rows_by_node": {
+      "esp32-thermal-01": 10,
+      "esp32-vibration-01": 10,
+      "esp32-marker-01": 11
+    }
+  },
+  {
+    "segment_id": "S057",
+    "start_ms": 1788717919602,
+    "end_ms": 1788717931343,
+    "start_utc": "2026-09-06T18:05:19.602000+00:00",
+    "end_utc": "2026-09-06T18:05:31.343000+00:00",
+    "duration_seconds": 11.741,
+    "rows_by_node": {
+      "esp32-vibration-01": 23,
+      "esp32-thermal-01": 27,
+      "esp32-marker-01": 24
+    }
+  },
+  {
+    "segment_id": "S058",
+    "start_ms": 1788717931344,
+    "end_ms": 1788717975623,
+    "start_utc": "2026-09-06T18:05:31.344000+00:00",
+    "end_utc": "2026-09-06T18:06:15.623000+00:00",
+    "duration_seconds": 44.279,
+    "rows_by_node": {
+      "esp32-vibration-01": 87,
+      "esp32-marker-01": 86,
+      "esp32-thermal-01": 85
+    }
+  },
+  {
+    "segment_id": "S059",
+    "start_ms": 1788717983629,
+    "end_ms": 1788717997635,
+    "start_utc": "2026-09-06T18:06:23.629000+00:00",
+    "end_utc": "2026-09-06T18:06:37.635000+00:00",
+    "duration_seconds": 14.006,
+    "rows_by_node": {
+      "esp32-marker-01": 28,
+      "esp32-vibration-01": 26,
+      "esp32-thermal-01": 28
+    }
+  },
+  {
+    "segment_id": "S060",
+    "start_ms": 1788718006423,
+    "end_ms": 1788718009639,
+    "start_utc": "2026-09-06T18:06:46.423000+00:00",
+    "end_utc": "2026-09-06T18:06:49.639000+00:00",
+    "duration_seconds": 3.216,
+    "rows_by_node": {
+      "esp32-thermal-01": 4,
+      "esp32-vibration-01": 2,
+      "esp32-marker-01": 4
+    }
+  },
+  {
+    "segment_id": "S061",
+    "start_ms": 1788718009647,
+    "end_ms": 1788718015649,
+    "start_utc": "2026-09-06T18:06:49.647000+00:00",
+    "end_utc": "2026-09-06T18:06:55.649000+00:00",
+    "duration_seconds": 6.002,
+    "rows_by_node": {
+      "esp32-marker-01": 11,
+      "esp32-vibration-01": 13,
+      "esp32-thermal-01": 12
+    }
+  },
+  {
+    "segment_id": "S062",
+    "start_ms": 1788718025644,
+    "end_ms": 1788718026423,
+    "start_utc": "2026-09-06T18:07:05.644000+00:00",
+    "end_utc": "2026-09-06T18:07:06.423000+00:00",
+    "duration_seconds": 0.779,
+    "rows_by_node": {
+      "esp32-marker-01": 5,
+      "esp32-thermal-01": 4,
+      "esp32-vibration-01": 4
+    }
+  },
+  {
+    "segment_id": "S063",
+    "start_ms": 1788718035652,
+    "end_ms": 1788718039650,
+    "start_utc": "2026-09-06T18:07:15.652000+00:00",
+    "end_utc": "2026-09-06T18:07:19.650000+00:00",
+    "duration_seconds": 3.998,
+    "rows_by_node": {
+      "esp32-marker-01": 5,
+      "esp32-thermal-01": 4,
+      "esp32-vibration-01": 4
+    }
+  },
+  {
+    "segment_id": "S064",
+    "start_ms": 1788718047655,
+    "end_ms": 1788718056428,
+    "start_utc": "2026-09-06T18:07:27.655000+00:00",
+    "end_utc": "2026-09-06T18:07:36.428000+00:00",
+    "duration_seconds": 8.773,
+    "rows_by_node": {
+      "esp32-vibration-01": 18,
+      "esp32-thermal-01": 16,
+      "esp32-marker-01": 16
+    }
+  },
+  {
+    "segment_id": "S065",
+    "start_ms": 1788718071438,
+    "end_ms": 1788718073674,
+    "start_utc": "2026-09-06T18:07:51.438000+00:00",
+    "end_utc": "2026-09-06T18:07:53.674000+00:00",
+    "duration_seconds": 2.236,
+    "rows_by_node": {
+      "esp32-vibration-01": 4,
+      "esp32-marker-01": 4,
+      "esp32-thermal-01": 5
+    }
+  },
+  {
+    "segment_id": "S066",
+    "start_ms": 1788718073675,
+    "end_ms": 1788718079680,
+    "start_utc": "2026-09-06T18:07:53.675000+00:00",
+    "end_utc": "2026-09-06T18:07:59.680000+00:00",
+    "duration_seconds": 6.005,
+    "rows_by_node": {
+      "esp32-vibration-01": 13,
+      "esp32-marker-01": 11,
+      "esp32-thermal-01": 12
+    }
+  },
+  {
+    "segment_id": "S067",
+    "start_ms": 1788718089670,
+    "end_ms": 1788718091443,
+    "start_utc": "2026-09-06T18:08:09.670000+00:00",
+    "end_utc": "2026-09-06T18:08:11.443000+00:00",
+    "duration_seconds": 1.773,
+    "rows_by_node": {
+      "esp32-vibration-01": 6,
+      "esp32-thermal-01": 7,
+      "esp32-marker-01": 4
+    }
+  },
+  {
+    "segment_id": "S068",
+    "start_ms": 1788718091444,
+    "end_ms": 1788718093679,
+    "start_utc": "2026-09-06T18:08:11.444000+00:00",
+    "end_utc": "2026-09-06T18:08:13.679000+00:00",
+    "duration_seconds": 2.235,
+    "rows_by_node": {
+      "esp32-marker-01": 2,
+      "esp32-thermal-01": 5,
+      "esp32-vibration-01": 2
+    }
+  },
+  {
+    "segment_id": "S069",
+    "start_ms": 1788718095674,
+    "end_ms": 1788718105690,
+    "start_utc": "2026-09-06T18:08:15.674000+00:00",
+    "end_utc": "2026-09-06T18:08:25.690000+00:00",
+    "duration_seconds": 10.016,
+    "rows_by_node": {
+      "esp32-vibration-01": 22,
+      "esp32-marker-01": 22,
+      "esp32-thermal-01": 24
+    }
+  },
+  {
+    "segment_id": "S070",
+    "start_ms": 1788718106439,
+    "end_ms": 1788718109686,
+    "start_utc": "2026-09-06T18:08:26.439000+00:00",
+    "end_utc": "2026-09-06T18:08:29.686000+00:00",
+    "duration_seconds": 3.247,
+    "rows_by_node": {
+      "esp32-vibration-01": 5,
+      "esp32-thermal-01": 8,
+      "esp32-marker-01": 4
+    }
+  },
+  {
+    "segment_id": "S071",
+    "start_ms": 1788718109689,
+    "end_ms": 1788718155704,
+    "start_utc": "2026-09-06T18:08:29.689000+00:00",
+    "end_utc": "2026-09-06T18:09:15.704000+00:00",
+    "duration_seconds": 46.015,
+    "rows_by_node": {
+      "esp32-vibration-01": 90,
+      "esp32-marker-01": 93,
+      "esp32-thermal-01": 91
+    }
+  },
+  {
+    "segment_id": "S072",
+    "start_ms": 1788718155705,
+    "end_ms": 1788718159704,
+    "start_utc": "2026-09-06T18:09:15.705000+00:00",
+    "end_utc": "2026-09-06T18:09:19.704000+00:00",
+    "duration_seconds": 3.999,
+    "rows_by_node": {
+      "esp32-marker-01": 8,
+      "esp32-vibration-01": 6,
+      "esp32-thermal-01": 7
+    }
+  },
+  {
+    "segment_id": "S073",
+    "start_ms": 1788718159705,
+    "end_ms": 1788718163715,
+    "start_utc": "2026-09-06T18:09:19.705000+00:00",
+    "end_utc": "2026-09-06T18:09:23.715000+00:00",
+    "duration_seconds": 4.01,
+    "rows_by_node": {
+      "esp32-vibration-01": 7,
+      "esp32-marker-01": 8,
+      "esp32-thermal-01": 8
+    }
+  },
+  {
+    "segment_id": "S074",
+    "start_ms": 1788718165712,
+    "end_ms": 1788718187726,
+    "start_utc": "2026-09-06T18:09:25.712000+00:00",
+    "end_utc": "2026-09-06T18:09:47.726000+00:00",
+    "duration_seconds": 22.014,
+    "rows_by_node": {
+      "esp32-vibration-01": 46,
+      "esp32-marker-01": 47,
+      "esp32-thermal-01": 43
+    }
+  },
+  {
+    "segment_id": "S075",
+    "start_ms": 1788718187727,
+    "end_ms": 1788718193736,
+    "start_utc": "2026-09-06T18:09:47.727000+00:00",
+    "end_utc": "2026-09-06T18:09:53.736000+00:00",
+    "duration_seconds": 6.009,
+    "rows_by_node": {
+      "esp32-vibration-01": 12,
+      "esp32-marker-01": 11,
+      "esp32-thermal-01": 12
+    }
+  },
+  {
+    "segment_id": "S076",
+    "start_ms": 1788718203736,
+    "end_ms": 1788718217755,
+    "start_utc": "2026-09-06T18:10:03.736000+00:00",
+    "end_utc": "2026-09-06T18:10:17.755000+00:00",
+    "duration_seconds": 14.019,
+    "rows_by_node": {
+      "esp32-thermal-01": 31,
+      "esp32-marker-01": 29,
+      "esp32-vibration-01": 30
+    }
+  },
+  {
+    "segment_id": "S077",
+    "start_ms": 1788718225764,
+    "end_ms": 1788718231369,
+    "start_utc": "2026-09-06T18:10:25.764000+00:00",
+    "end_utc": "2026-09-06T18:10:31.369000+00:00",
+    "duration_seconds": 5.605,
+    "rows_by_node": {
+      "esp32-vibration-01": 13,
+      "esp32-marker-01": 12,
+      "esp32-thermal-01": 11
+    }
+  },
+  {
+    "segment_id": "S078",
+    "start_ms": 1788718231471,
+    "end_ms": 1788718235770,
+    "start_utc": "2026-09-06T18:10:31.471000+00:00",
+    "end_utc": "2026-09-06T18:10:35.770000+00:00",
+    "duration_seconds": 4.299,
+    "rows_by_node": {
+      "esp32-vibration-01": 5,
+      "esp32-marker-01": 5,
+      "esp32-thermal-01": 4
+    }
+  }
+]

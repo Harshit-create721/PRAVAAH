@@ -63,6 +63,7 @@ test('live captures exclude known synthetic, stale retained, malformed and unide
   const recording = new Recording({ directory: temporaryDirectory(), metadata });
   for (const [topic, body, packet] of [
     [`${prefix}/telemetry`, frame({ node: 'bench-harness-01', temperature: 30 })],
+    [`${prefix}/telemetry`, frame({ node: 'esp32-marker-01', belt_speed: .41, playback: { recorded_at_ms: 1788715800166, rate: 1 } })],
     [`${prefix}/node/bench-harness-01/status`, frame({ node: 'esp32-thermal-01', online: true })],
     [`${prefix}/telemetry`, frame({ node: 'esp32-thermal-01', temperature: 30 }), { retain: true }],
     [`${prefix}/telemetry`, Buffer.from('{bad')],
@@ -72,7 +73,7 @@ test('live captures exclude known synthetic, stale retained, malformed and unide
   ]) assert.equal(recording.accept(topic, body, packet), false);
   recording.close();
   assert.equal(readLines(recording.directory, 'frames.jsonl').length, 0);
-  assert.equal(readLines(recording.directory, 'excluded.jsonl').length, 7);
+  assert.equal(readLines(recording.directory, 'excluded.jsonl').length, 8);
 });
 
 test('gaps and possible resets are per node; joint events remain separate after a restart', () => {

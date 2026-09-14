@@ -1,5 +1,35 @@
 # PRAVAAH — conveyor integrity for Indian mining
 
+To preview the animated conveyor using the supplied **BeltData recording**, run:
+
+```powershell
+npm run demo:recording
+```
+
+Open **http://localhost:8812**. Playback uses its own MQTT port (1884), a separate
+`data/replay-animation.db`, and no public relay. Ctrl+C stops the gateway and
+replay. The recorded segments loop continuously at their original rate, including
+brief gaps between segments and cycles. Stop an earlier playback before starting another.
+
+The default 3D view is a **mining conveyor**, with a troughed belt, coal load,
+loading chute, idlers and support structure. Belt markings travel around the full loop and pulley marks rotate with
+measured `belt_speed` (about 0.41 m/s in this recording). One visual circuit
+corresponds to the configured 1.20 m belt loop, roughly 2.9 seconds. Zero speed,
+missing/stale speed, an offline speed node, and recording gaps hold the motion.
+**Pause motion** freezes only the animation; monitoring continues. Reduced-motion
+preferences start it paused. Direction, marking positions and pulley rotation
+are illustrative; the Hall sensor does not measure those independently.
+
+The mining view also shows a moving coal bed, faceted fragments feeding through
+the hopper and tumbling off the head, and rotating carrying/return idler markings.
+These illustrate material transport; they do not report measured coal throughput.
+All motion shares the pause and sensor-freshness controls. The WebGL renderer
+targets 60 fps and reuses stationary GPU buffers; the SVG fallback targets 24 fps.
+
+The same animation works with live sensors on the normal gateway at port 8811.
+Recorded playback is labelled on the model and in exported status reports;
+the recorder rejects replay frames as new live acquisition.
+
 **प्रवाह** — *flow*. Real-time monitoring and decision support for conveyor
 belt joints and splices on ROM, overland and underground belts.
 
@@ -66,7 +96,7 @@ test harness of §9.
 From a terminal, equivalently:
 
 ```bash
-cd C:/Users/OMEN/beltguard && npm install && npm start
+npm install && npm start          # run from the PRAVAAH-main folder
 ```
 
 Either way, open <http://localhost:8811>. It will say it is waiting for the

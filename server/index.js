@@ -152,6 +152,10 @@ function onTelemetry(cv, payload, raw) {
   if (payload.sensor_health) applySensorHealth(cv, node, payload.sensor_health, r.values);
   if (node) touchNode(node, cv.id, payload);
   if (!r.ok && !payload.sensor_health) return;
+  const playback = payload.playback;
+  cv.playback = Number.isFinite(playback?.recorded_at_ms) && Number.isFinite(playback?.rate) && playback.rate > 0
+    ? { recorded_at_ms: playback.recorded_at_ms, rate: playback.rate, loop: playback.loop === true,
+      cycle: Number.isSafeInteger(playback.cycle) && playback.cycle > 0 ? playback.cycle : null } : null;
   if (r.ok) store.telemetry(r.ts, cv.id, node, payload.seq, r.values);
   cv.counters.telemetry++;
   cv.lastMessageTs = Date.now();
@@ -183,7 +187,37 @@ function onTelemetry(cv, payload, raw) {
       ts: Math.min(cv.channels.temperature.ts, cv.channels.ambient.ts), node: 'derived' };
   } else delete cv.channels.temperature_delta;
 
-  applyFindings(cv, null, ev.findings, 'telemetry');
+  applyFindings(cv, null, persistentFindings(cv, ev), 'telemetry');
+}
+
+// The channel whose NEW sample decides each telemetry rule. Merged state is
+// re-evaluated on every node's frame, so counting evaluations would let one
+// vibration frame "persist" merely because the thermal node published twice.
+const RULE_SAMPLE = {
+  vibration_high: 'vibration_rms', vibration_impulsive: 'vibration_crest',
+  thermal_delta: 'temperature', motor_overcurrent: 'motor_current_rms',
+  slip_ratio: 'belt_speed', speed_deviation: 'motor_rpm',
+};
+
+/**
+ * Drop planned-inspection findings that have not held for `persistSamples`
+ * consecutive new samples. Urgent/critical pass at once, and rules without a
+ * sample channel are not delayed. Metrics (component colours) are untouched:
+ * they keep showing the instantaneous measurement.
+ */
+function persistentFindings(cv, ev) {
+  const need = Math.max(1, Math.round(cv.config.thresholds?.persistSamples ?? 1));
+  cv.persist ??= {};
+  for (const m of ev.metrics) {
+    const channel = RULE_SAMPLE[m.rule];
+    const ts = channel ? cv.channels[channel]?.ts : undefined;
+    const p = (cv.persist[m.rule] ??= { ts: null, count: 0 });
+    if (!Number.isFinite(ts) || ts === p.ts) continue;
+    p.ts = ts;
+    p.count = Number.isFinite(m.ratio) && m.ratio >= 1 ? p.count + 1 : 0;
+  }
+  return ev.findings.filter((f) => f.level === 'urgent_inspection' || f.level === 'critical'
+    || !RULE_SAMPLE[f.rule] || (cv.persist[f.rule]?.count ?? 0) >= need);
 }
 
 function onJointPass(cv, payload, raw, source) {
@@ -271,16 +305,42 @@ function touchNode(node, conveyorId, payload) {
   store.nodeStatus(node, conveyorId, true, meta);
 }
 
-/** Raise alarms for new findings, de-duplicated per (joint, rule). */
-const openKeys = new Map(); // `${cv}|${joint}|${rule}` -> alarmId
+/**
+ * Raise alarms for new findings, de-duplicated per (joint, rule).
+ *
+ * A repeat of an OPEN alarm is not silent: if the same fault comes back at a
+ * worse level or a larger ratio of its limit, the open alarm is escalated in
+ * place, so the card shows the peak rather than the first, smaller breach.
+ */
+const openKeys = new Map(); // `${cv}|${joint}|${rule}` -> { id, level, ratio }
+// Re-arm de-duplication from the database, so a restart does not raise a
+// second copy of every alarm that is still open.
+for (const c of config.conveyors) {
+  for (const a of store.openAlarms(c.id)) {
+    let ev = null;
+    try { ev = JSON.parse(a.evidence ?? 'null'); } catch { /* legacy row */ }
+    if (!ev?.rule) continue;
+    const key = `${c.id}|${a.joint_id ?? '-'}|${ev.rule}`;
+    if (!openKeys.has(key)) openKeys.set(key, { id: a.id, level: a.level, ratio: ev.ratio ?? null });
+  }
+}
 function applyFindings(cv, jointId, findings, source) {
   for (const f of findings) {
     const key = `${cv.id}|${jointId ?? '-'}|${f.rule}`;
-    if (openKeys.has(key)) continue;
-    const id = store.alarm(Date.now(), cv.id, jointId, f.level, f.family, f.message,
-      { rule: f.rule, source, measured: f.measured });
-    openKeys.set(key, id);
-    broadcast({ type: 'alarm', alarm: { id, ts: Date.now(), conveyor: cv.id, joint_id: jointId, level: f.level, family: f.family, message: f.message, evidence: JSON.stringify({ rule: f.rule, source, measured: f.measured }) } });
+    const evidence = { rule: f.rule, component: f.component ?? null, source, measured: f.measured, ratio: f.ratio ?? null };
+    const open = openKeys.get(key);
+    if (open) {
+      const level = worse(f.level, open.level);
+      const larger = Number.isFinite(f.ratio) && (!Number.isFinite(open.ratio) || f.ratio > open.ratio);
+      if (level === open.level && !larger) continue;
+      store.updateAlarm(open.id, level, f.message, evidence);
+      openKeys.set(key, { id: open.id, level, ratio: larger ? f.ratio : open.ratio });
+      broadcast({ type: 'alarm', alarm: { id: open.id, ts: Date.now(), conveyor: cv.id, joint_id: jointId, level, family: f.family, message: f.message, evidence: JSON.stringify(evidence), escalated: true } });
+      continue;
+    }
+    const id = store.alarm(Date.now(), cv.id, jointId, f.level, f.family, f.message, evidence);
+    openKeys.set(key, { id, level: f.level, ratio: f.ratio ?? null });
+    broadcast({ type: 'alarm', alarm: { id, ts: Date.now(), conveyor: cv.id, joint_id: jointId, level: f.level, family: f.family, message: f.message, evidence: JSON.stringify(evidence) } });
   }
   recomputeRisk(cv);
 }
@@ -389,7 +449,8 @@ client.on('message', (topic, buf) => {
 function snapshot() {
   return {
     type: 'snapshot',
-    server: { now: Date.now(), uptime_s: Math.round((Date.now() - started) / 1000), site: config.site },
+    server: { now: Date.now(), uptime_s: Math.round((Date.now() - started) / 1000), site: config.site,
+      siteLabel: config.siteLabel ?? config.site, timeZone: config.timeZone ?? null },
     mqtt: { connected: client.connected, broker: config.mqtt.embedded ? 'embedded' : config.mqtt.url, port: config.mqtt.port },
     conveyors: config.conveyors.map((c) => {
       const cv = live.get(c.id);
@@ -405,7 +466,7 @@ function snapshot() {
       return {
         id: c.id, label: c.label,
         components: componentStatus({
-          channels, alarms, joints,
+          channels, alarms, joints, model: c.model ?? 'mining',
           // Joint rules also speak about shared parts (marker asymmetry and
           // lateral offset are evidence about belt tracking), so their metrics
           // have to reach the component fold too - not just the drive rules.
@@ -415,6 +476,7 @@ function snapshot() {
           ],
         }),
         geometry: {
+          model: c.model ?? 'mining',
           beltLengthM: c.beltLengthM, beltWidthMm: c.beltWidthMm,
           driveRatedCurrentA: c.driveRatedCurrentA, pulleyDiameterMm: c.pulleyDiameterMm,
           gearRatio: c.gearRatio,
@@ -427,6 +489,7 @@ function snapshot() {
         risk: cv.risk, riskSource: cv.riskSource,
         analysis: cv.analysis,
         ml: mlWorkers.get(cv.id)?.snapshot() ?? null,
+        playback: cv.playback ?? null,
         sensorHealth: cv.sensorHealth ?? null,
         hallDiagnostics: cv.hallDiagnostics ?? null,
         telemetrySkipped: cv.telemetrySkipped ?? [],
@@ -520,7 +583,7 @@ async function executeCommand({ action, payload = {} }) {
     store.closeAlarm(id, payload.outcome, payload.technician, payload.notes);
     // Closing the alarm must also clear the key that suppressed re-raising it,
     // or the same fault stays invisible until the process restarts.
-    for (const [key, value] of openKeys) if (value === id) openKeys.delete(key);
+    for (const [key, value] of openKeys) if (value.id === id) openKeys.delete(key);
     for (const cv of live.values()) recomputeRisk(cv);
     pushSnapshot();
     return { closed: id };

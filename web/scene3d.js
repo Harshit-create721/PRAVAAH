@@ -1,14 +1,6 @@
-// A small 3D renderer that draws to SVG. No dependencies, no build step.
-//
-// Why not three.js: this runs on a laptop in a coal handling plant that may
-// have no internet, and vendoring 600 KB of engine to draw eight cylinders is
-// a bad trade. This is a real 3D pipeline - rotation matrices, perspective
-// divide, back-face culling, painter's depth sort, flat shading from a single
-// light - in about the size of one of three.js's loaders.
-//
-// Drawing to SVG rather than WebGL is deliberate too: every face stays a DOM
-// element, so hover, click and focus work with no raycasting, and the picture
-// stays sharp at any zoom.
+// Shared conveyor geometry, camera, picking and SVG fallback. No dependencies.
+// The main viewport uses webgl3d.js for per-pixel depth testing; SVG retains
+// labels and keyboard targets, and renders the model if WebGL is unavailable.
 //
 // Model space: +x runs along the belt, +y is up, +z is across the belt.
 
@@ -47,21 +39,21 @@ const Scene3D = (() => {
     '#' + c.map((n) => clamp255(n).toString(16).padStart(2, '0')).join('');
 
   /**
-   * Flat shading. The light is a cap lamp: warm, from above and slightly in
+   * Flat shading. A soft studio key from above and slightly in
    * front, with enough ambient that an unlit face is still readable rather
    * than black - an operator has to be able to see the whole machine.
    */
   const LIGHT = norm([-0.35, 0.86, 0.38]);
-  const WARM = [255, 214, 150];
+  const LIGHT_TINT = [220, 236, 247];
 
   function shade(hex, n, opts = {}) {
     const base = hex2rgb(hex);
     const lam = Math.max(0, dot(n, LIGHT));
     const amb = opts.ambient ?? 0.34;
     const i = amb + (1 - amb) * lam;
-    // A touch of the lamp's colour on the lit faces, none on the shadowed ones.
+    // A subtle neutral highlight keeps steel distinct from the rubber belt.
     const w = 0.14 * lam;
-    return rgb2hex(base.map((c, k) => c * i * (1 - w) + WARM[k] * w * i));
+    return rgb2hex(base.map((c, k) => c * i * (1 - w) + LIGHT_TINT[k] * w * i));
   }
 
   // ------------------------------------------------------------- projection
@@ -78,6 +70,7 @@ const Scene3D = (() => {
    * closest and paint straight over the belt they hold up.
    */
   function toCam(p, cam) {
+    p = sub(p, [cam.tx ?? 0, cam.ty ?? 0, cam.tz ?? 0]);
     const cy = Math.cos(cam.yaw), sy = Math.sin(cam.yaw);
     const x1 = p[0] * cy - p[2] * sy;
     const z1 = p[0] * sy + p[2] * cy;
@@ -306,6 +299,68 @@ const Scene3D = (() => {
   const esc = (s) => String(s ?? '').replace(/[&<>"']/g,
     (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
+  // Clip the portion crossing the near plane instead of dropping a whole face.
+  function clipNear(points, near = 1) {
+    const out = [];
+    for (let i = 0; i < points.length; i++) {
+      const a = points[i], b = points[(i + 1) % points.length];
+      const insideA = a[2] >= near, insideB = b[2] >= near;
+      if (insideA) out.push(a);
+      if (insideA !== insideB) {
+        const t = (near - a[2]) / (b[2] - a[2]);
+        // Interpolate attached model coordinates as well as camera position.
+        out.push(a.map((v, k) => k === 2 ? near : v + (b[k] - v) * t));
+      }
+    }
+    return out;
+  }
+
+  const MATERIALS = { steel: 1, rubber: 2, coal: 3, paint: 4 };
+
+  function prepare(faces, cam) {
+    const out = [];
+    for (const face of faces) {
+      const cameraPoints = face.pts.map(p => toCam(p, cam));
+      if (!cameraPoints.every(p => p.every(Number.isFinite))) continue;
+      const normal = rotate(faceNormal(face.pts), cam);
+      const back = dot(normal, cameraPoints[0]) > 0;
+      if (!face.twoSided && back) continue;
+      const clipped = clipNear(cameraPoints.map((p, i) => [...p, ...face.pts[i]]));
+      const points = clipped.map(p => p.slice(0, 3));
+      if (points.length < 3) continue;
+      const lit = face.flat ? face.color : shade(face.color, back ? normal.map(v => -v) : normal, face);
+      out.push({ points, projected: points.map(p => screen(p, cam)),
+        modelPoints: clipped.map(p => p.slice(3, 6)),
+        material: face.flat ? 0 : MATERIALS[face.material] ?? 0,
+        textureStrength: face.textureStrength ?? 1,
+        color: hex2rgb(lit).map(v => v / 255), comp: face.comp ?? null });
+    }
+    return out;
+  }
+
+  // Perspective-correct depth at the pointer, using the same triangles as WebGL.
+  // Unselectable structure still occludes components behind it.
+  function pick(prepared, x, y, selected = null) {
+    let closest = Infinity, hit = null, selectedHit = false;
+    for (const face of prepared) {
+      for (let i = 1; i < face.projected.length - 1; i++) {
+        const [a, b, c] = [face.projected[0], face.projected[i], face.projected[i + 1]];
+        const det = (b[1] - c[1]) * (a[0] - c[0]) + (c[0] - b[0]) * (a[1] - c[1]);
+        if (Math.abs(det) < 1e-8) continue;
+        const u = ((b[1] - c[1]) * (x - c[0]) + (c[0] - b[0]) * (y - c[1])) / det;
+        const v = ((c[1] - a[1]) * (x - c[0]) + (a[0] - c[0]) * (y - c[1])) / det;
+        const w = 1 - u - v;
+        if (Math.min(u, v, w) < -1e-7) continue;
+        const depth = 1 / (u / a[2] + v / b[2] + w / c[2]);
+        const isSelected = selected !== null && face.comp === selected;
+        if ((isSelected && !selectedHit) || (isSelected === selectedHit && depth < closest)) {
+          closest = depth; hit = face.comp; selectedHit = isSelected;
+        }
+      }
+    }
+    return hit;
+  }
+
   /**
    * Project, cull, sort and emit. Faces are returned as individual polygons
    * carrying `data-comp`, so hit testing is just event delegation.
@@ -314,11 +369,11 @@ const Scene3D = (() => {
    * `flat` (skip shading - used for indicator bands that must keep their
    * exact status colour), and `glow`.
    */
-  function render(faces, cam) {
+  function render(faces, cam, textures = true) {
     const out = [];
     for (const f of faces) {
-      const cs = f.pts.map((p) => toCam(p, cam));
-      if (cs.some((p) => p[2] <= 1)) continue;           // behind the camera
+      const cs = clipNear(f.pts.map((p) => toCam(p, cam)));
+      if (cs.length < 3) continue;
 
       const nr = rotate(faceNormal(f.pts), cam);
       // Back-face cull against the vector from the camera to the face, not
@@ -346,7 +401,20 @@ const Scene3D = (() => {
     // Painter's algorithm: furthest first.
     out.sort((a, b) => b.depth - a.depth);
 
-    return out.map(({ f, proj, lit, edge }) => {
+    // A lightweight stipple/grain treatment for machines without WebGL.
+    // GPU rendering uses continuous model-space textures; SVG uses shared
+    // patterns scaled with the camera so it remains useful at close range.
+    const textured = textures && out.some(({ f }) => !f.flat && MATERIALS[f.material]);
+    const origin = project([0, 0, 0], cam);
+    const size = Math.max(0.4, cam.focal / cam.dist);
+    const transform = `translate(${origin[0].toFixed(2)} ${origin[1].toFixed(2)}) scale(${size.toFixed(3)})`;
+    const defs = textured ? `<defs>
+      <pattern id="surface-steel" width="18" height="6" patternUnits="userSpaceOnUse" patternTransform="${transform}"><path d="M0 1h12M7 4h11" stroke="#fff" stroke-opacity=".25" stroke-width=".4"/><path d="M2 2h15M0 5h8" stroke="#000" stroke-opacity=".3" stroke-width=".4"/></pattern>
+      <pattern id="surface-rubber" width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="${transform}"><path d="M1 0v6" stroke="#000" stroke-opacity=".3" stroke-width=".7"/><circle cx="3" cy="2" r=".45" fill="#fff" fill-opacity=".2"/><circle cx="5" cy="5" r=".6" fill="#000" fill-opacity=".3"/></pattern>
+      <pattern id="surface-coal" width="14" height="12" patternUnits="userSpaceOnUse" patternTransform="${transform}"><path d="m1 2 4-2 3 4-4 3-4-2Zm8 6 3-3 2 5-3 2Z" fill="#fff" fill-opacity=".18"/><path d="m0 10 4-3 3 4-2 1Z" fill="#000" fill-opacity=".35"/></pattern>
+      <pattern id="surface-paint" width="5" height="5" patternUnits="userSpaceOnUse" patternTransform="${transform}"><circle cx="1" cy="2" r=".45" fill="#fff" fill-opacity=".2"/><circle cx="4" cy="4" r=".5" fill="#000" fill-opacity=".25"/></pattern>
+    </defs>` : '';
+    return defs + out.map(({ f, proj, lit, edge }) => {
       const pts = proj.map((p) => `${p[0].toFixed(1)},${p[1].toFixed(1)}`).join(' ');
       const attrs = [
         `points="${pts}"`,
@@ -358,7 +426,9 @@ const Scene3D = (() => {
         f.dash ? `stroke-dasharray="${f.dash}"` : '',
         f.cls ? `class="${f.cls}"` : '',
       ].filter(Boolean).join(' ');
-      return `<polygon ${attrs}/>`;
+      const texture = textured && !f.flat && MATERIALS[f.material]
+        ? `<polygon points="${pts}" fill="url(#surface-${f.material})" opacity="${(f.textureStrength ?? 1) * 0.45}" pointer-events="none"/>` : '';
+      return `<polygon ${attrs}/>${texture}`;
     }).join('');
   }
 
@@ -387,8 +457,8 @@ const Scene3D = (() => {
    */
   function orbit(el, cam, onChange) {
     let drag = null;
-    const PITCH_MIN = -0.15, PITCH_MAX = 0.95;
-    const DIST_MIN = 450, DIST_MAX = 1900;
+    const PITCH_MIN = -0.15, PITCH_MAX = 1.2;
+    const FOCAL_MIN = 650, FOCAL_MAX = 9000;
 
     // `onChange(true)` means "a gesture is in flight" - the caller is free to
     // drop detail until it ends. `onChange(false)` is the settled frame and is
@@ -401,40 +471,44 @@ const Scene3D = (() => {
     };
 
     el.addEventListener('pointerdown', (e) => {
-      if (e.button !== 0) return;
-      drag = { x: e.clientX, y: e.clientY, yaw: cam.yaw, pitch: cam.pitch, moved: 0 };
-      el.setPointerCapture(e.pointerId);
-      el.classList.add('dragging');
+      if (e.button !== 0 || drag) return;
+      el.dataset.dragged = '';
+      drag = { id: e.pointerId, x: e.clientX, y: e.clientY, yaw: cam.yaw, pitch: cam.pitch, moved: 0 };
+
     });
     el.addEventListener('pointermove', (e) => {
-      if (!drag) return;
+      if (!drag || e.pointerId !== drag.id) return;
       const dx = e.clientX - drag.x, dy = e.clientY - drag.y;
       drag.moved = Math.max(drag.moved, Math.abs(dx) + Math.abs(dy));
+      if (drag.moved <= 4) return;
+      el.setPointerCapture(e.pointerId);
+      el.classList.add('dragging');
       cam.yaw = drag.yaw + dx * 0.008;
       cam.pitch = Math.max(PITCH_MIN, Math.min(PITCH_MAX, drag.pitch + dy * 0.006));
       onChange(true);
     });
     const end = (e) => {
-      if (!drag) return;
+      if (!drag || e.pointerId !== drag.id) return;
       const moved = drag.moved;
       drag = null;
       el.classList.remove('dragging');
       try { el.releasePointerCapture(e.pointerId); } catch { /* already gone */ }
       // Tell the caller whether this was a drag or a click, so a click that
       // ended a rotation does not also open a drawer.
-      el.dataset.dragged = moved > 4 ? '1' : '';
-      onChange(false);
+      el.dataset.dragged = moved > 4 || e.type === 'pointercancel' ? '1' : '';
+      if (moved > 4) onChange(false);
     };
     el.addEventListener('pointerup', end);
     el.addEventListener('pointercancel', end);
+    el.addEventListener('lostpointercapture', end);
 
-    // Wheel dollies the camera. The machine is 40 m of conveyor on one screen;
-    // without this an operator cannot get close enough to read the state of a
-    // single idler set.
+    // Optical zoom leaves the camera outside the machine. Moving the camera
+    // into its geometry was clipping away parts during close inspection.
     el.addEventListener('wheel', (e) => {
       e.preventDefault();
-      const k = Math.exp(e.deltaY * 0.0011);
-      cam.dist = Math.max(DIST_MIN, Math.min(DIST_MAX, cam.dist * k));
+      const pixels = e.deltaY * (e.deltaMode === 1 ? 16 : e.deltaMode === 2 ? 420 : 1);
+      const k = Math.exp(-Math.max(-500, Math.min(500, pixels)) * 0.0011);
+      cam.focal = Math.max(FOCAL_MIN, Math.min(FOCAL_MAX, cam.focal * k));
       onChange(true);
       settleSoon();
     }, { passive: false });
@@ -446,8 +520,8 @@ const Scene3D = (() => {
       else if (e.key === 'ArrowRight') cam.yaw += step;
       else if (e.key === 'ArrowUp') cam.pitch = Math.min(PITCH_MAX, cam.pitch + step * 0.6);
       else if (e.key === 'ArrowDown') cam.pitch = Math.max(PITCH_MIN, cam.pitch - step * 0.6);
-      else if (e.key === '+' || e.key === '=') cam.dist = Math.max(DIST_MIN, cam.dist * 0.9);
-      else if (e.key === '-' || e.key === '_') cam.dist = Math.min(DIST_MAX, cam.dist / 0.9);
+      else if (e.key === '+' || e.key === '=') cam.focal = Math.min(FOCAL_MAX, cam.focal / 0.9);
+      else if (e.key === '-' || e.key === '_') cam.focal = Math.max(FOCAL_MIN, cam.focal * 0.9);
       else return;
       e.preventDefault();
       onChange(false);
@@ -456,7 +530,7 @@ const Scene3D = (() => {
 
   return {
     box, cylinderZ, cylinderBetween, ribbon, loft, beltProfile, beltPath, beltSection,
-    render, project, bounds, orbit, shade, faceNormal, norm, dot, cross, sub,
+    render, prepare, pick, clipNear, project, bounds, orbit, shade, faceNormal, norm, dot, cross, sub,
   };
 })();
 

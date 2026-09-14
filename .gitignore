@@ -14,3 +14,11 @@ data/evidence/*.png
 # Deployment secrets. deploy/.env.example is the tracked template; a real .env
 # holds the relay publish secret in cleartext and must never be committed.
 .env
+
+# Local checkpoints and replay/test databases (see PROJECT_STATE.md).
+_snapshots/
+data/replay.db*
+data/replay-animation.db*
+
+# macOS archive metadata (AppleDouble files from unzipping on a Mac).
+__MACOSX/

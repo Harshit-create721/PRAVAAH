@@ -240,5 +240,75 @@ console.log('\npitch puts the camera above the machine');
   ok('the belt paints over the stringer that carries it', lum(belted[1]) > lum(belted[0]));
 }
 
+console.log('\ncomponent focus and pointer gestures');
+{
+  const target = [260, 45, 170];
+  const camera = { ...CAM, yaw: -0.66, pitch: 0.36, tx: target[0], ty: target[1], tz: target[2] };
+  const center = S.project(target, camera);
+  ok('selected component stays centered after camera rotation',
+    Math.abs(center[0] - CAM.cx) < 1e-9 && Math.abs(center[1] - CAM.cy) < 1e-9);
+  const local = S.project([15, 10, 5], { ...camera, tx: 0, ty: 0, tz: 0 });
+  const translated = S.project([275, 55, 175], camera);
+  ok('target translation preserves perspective and depth', local.every((v, i) => Math.abs(v - translated[i]) < 1e-9));
+
+  const handlers = {}, changes = [];
+  let captured = false;
+  const el = {
+    dataset: {}, classList: { add() {}, remove() {} },
+    addEventListener(name, fn) { handlers[name] = fn; },
+    setPointerCapture() { captured = true; },
+    releasePointerCapture() { captured = false; },
+  };
+  S.orbit(el, { ...camera }, fast => changes.push(fast));
+  const event = { button: 0, pointerId: 1, clientX: 100, clientY: 100 };
+  handlers.pointerdown(event);
+  handlers.pointermove({ ...event, clientX: 102 });
+  ok('a click does not capture or redraw away its component target', !captured && changes.length === 0);
+  handlers.pointerup({ ...event, type: 'pointerup' });
+  ok('a settled click remains available to component selection', !el.dataset.dragged && changes.length === 0);
+  handlers.pointerdown(event);
+  handlers.pointermove({ ...event, clientX: 130 });
+  ok('orbit captures the pointer once dragging starts', captured && changes.at(-1) === true);
+  handlers.pointerup({ ...event, type: 'pointerup' });
+  ok('drag completion cannot accidentally select a component', el.dataset.dragged === '1' && !captured && changes.at(-1) === false);
+  handlers.pointerdown(event);
+  handlers.pointercancel({ ...event, type: 'pointercancel' });
+  ok('cancelled touch cannot select a component', el.dataset.dragged === '1');
+}
+
+console.log('\nclipping, depth picking and safe zoom');
+{
+  const crossing = [[-3, -3, -2], [3, -3, 3], [3, 3, 3], [-3, 3, -2]];
+  const clipped = S.clipNear(crossing);
+  ok('a near-plane crossing retains the visible portion', clipped.length === 4 && clipped.every(p => p[2] >= 1));
+  ok('clipped vertices stay finite', clipped.flat().every(Number.isFinite));
+  ok('a fully hidden polygon is removed', S.clipNear(crossing.map(p => [p[0], p[1], -2])).length === 0);
+  ok('SVG fallback also clips instead of dropping a partially visible face',
+    faces(S.render([{ pts: crossing, color: '#ffffff', twoSided: true }], { ...CAM, dist: 0 })) === 1);
+
+  const slanted = { comp: 'roller', projected: [[0, 0, 2], [100, 0, 20], [0, 100, 20]] };
+  const flat = { comp: 'belt', projected: [[0, 0, 10], [100, 0, 10], [0, 100, 10]] };
+  ok('picking uses depth at the pointer rather than average face depth', S.pick([flat, slanted], 5, 5) === 'roller');
+  ok('picking stays correct at the other end of an overlapping face', S.pick([slanted, flat], 90, 5) === 'belt');
+  ok('empty space does not select a component', S.pick([flat, slanted], 200, 200) === null);
+  ok('structural steel blocks picking through the model', S.pick([slanted, { ...flat, comp: null }], 90, 5) === null);
+  ok('inspection picking matches the revealed selected layer', S.pick([slanted, flat], 90, 5, 'roller') === 'roller');
+
+  const handlers = {}, camera = { ...CAM, dist: 1420, focal: 1420, pitch: 1.06 };
+  const el = { dataset: {}, classList: { add() {}, remove() {} },
+    addEventListener(name, fn) { handlers[name] = fn; }, setPointerCapture() {}, releasePointerCapture() {} };
+  S.orbit(el, camera, () => {});
+  for (let i = 0; i < 100; i++) handlers.wheel({ deltaY: -500, deltaMode: 0, preventDefault() {} });
+  ok('repeated zoom never drives the camera into the conveyor', camera.dist === 1420 && camera.focal === 9000);
+  for (let i = 0; i < 100; i++) handlers.keydown({ key: '-', preventDefault() {} });
+  ok('keyboard zoom remains bounded', camera.dist === 1420 && camera.focal === 650);
+  handlers.pointerdown({ button: 0, pointerId: 1, clientX: 0, clientY: 0 });
+  handlers.pointermove({ pointerId: 2, clientX: 100, clientY: 100 });
+  ok('another pointer cannot hijack the active orbit', camera.pitch === 1.06);
+  handlers.pointermove({ pointerId: 1, clientX: 10, clientY: 0 });
+  ok('dragging from the top preset does not snap the pitch', camera.pitch === 1.06);
+  handlers.pointercancel({ pointerId: 1, type: 'pointercancel' });
+}
+
 console.log(`\n${pass} passed, ${fail} failed\n`);
 process.exit(fail ? 1 : 0);

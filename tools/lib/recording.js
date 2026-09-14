@@ -84,6 +84,7 @@ export class Recording {
     let payload;
     try { payload = JSON.parse(raw); } catch { return exclude('invalid JSON'); }
     if (!payload || typeof payload !== 'object' || Array.isArray(payload)) return exclude('expected a JSON object');
+    if (payload.playback) return exclude('recorded playback is not a new sensor acquisition');
     const node = typeof payload.node === 'string' && payload.node.trim() ? payload.node : status?.[1];
     if (!node) return exclude('missing node identity');
     const synthetic = node.startsWith('bench-') || Boolean(status?.[1].startsWith('bench-'));

@@ -186,6 +186,12 @@ export class Store {
     return Number(r.lastInsertRowid);
   }
 
+  /** Escalate an OPEN alarm in place when the same fault gets worse. */
+  updateAlarm(id, level, message, evidence) {
+    this.db.prepare(`UPDATE alarms SET level=?, message=?, evidence=? WHERE id=? AND closed_ts IS NULL`)
+      .run(level, message ?? null, evidence ? JSON.stringify(evidence) : null, id);
+  }
+
   reject(topic, reason, sample) {
     this.insReject.run(Date.now(), topic, reason, String(sample).slice(0, 500));
   }
@@ -271,7 +277,10 @@ export class Store {
 
   recentAlarms(conveyor, limit = 100) {
     return this.db.prepare(
-      `SELECT * FROM alarms WHERE conveyor=? ORDER BY ts DESC LIMIT ?`
+      `SELECT a.*,
+         (SELECT technician FROM maintenance m WHERE m.alarm_id = a.id ORDER BY m.ts DESC LIMIT 1) AS closed_by,
+         (SELECT notes FROM maintenance m WHERE m.alarm_id = a.id ORDER BY m.ts DESC LIMIT 1) AS close_notes
+       FROM alarms a WHERE a.conveyor=? ORDER BY a.ts DESC LIMIT ?`
     ).all(conveyor, limit);
   }
 

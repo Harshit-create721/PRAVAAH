@@ -5,7 +5,12 @@
 // dependent readout as "not configured" rather than guessing.
 
 export default {
+  // `site` is part of every MQTT topic the nodes publish on; changing it means
+  // reflashing them. `siteLabel` is what people see, and can change freely.
   site: 'factory',
+  siteLabel: 'Pilot test rig',
+  // Every time shown on screen is in this zone, labelled. Exports stay UTC.
+  timeZone: 'Asia/Kolkata',
 
   // HTTP + WebSocket for the dashboard UI.
   http: { host: '0.0.0.0', port: 8811 },
@@ -32,9 +37,12 @@ export default {
   },
 
   // Outbound link to the public relay. The gateway dials out, so nothing here
-  // requires inbound network access. Set `enabled: false` to run purely local.
+  // requires inbound network access.
+  // OFF unless a publish secret is configured (deploy/.env) or PRAVAAH_RELAY=1:
+  // plant data must never leave the site by default. When you do enable it,
+  // also set RELAY_WRITE_TOKEN on the relay, or anyone can ack/close alarms.
   relay: {
-    enabled: true,
+    enabled: Boolean(process.env.RELAY_PUBLISH_SECRET) || process.env.PRAVAAH_RELAY === '1',
     url: 'wss://api.sih.shubhang.dev/publish',
     // Must match RELAY_PUBLISH_SECRET on the relay. null = relay accepts anyone.
     publishSecret: process.env.RELAY_PUBLISH_SECRET || null,
@@ -47,7 +55,11 @@ export default {
   conveyors: [
     {
       id: 'CV-01',
-      label: 'Test conveyor 1',
+      label: 'Bench test conveyor',
+      // Which physical machine the 3D view and part roster describe:
+      // 'bench' = the flat-belt demo rig (photo in ConveryBelt/),
+      // 'mining' = a troughed mining conveyor (target deployment).
+      model: 'mining',
 
       // --- Measured geometry. Fill these in from the rig. ---
       beltLengthM: 1.2,         // user confirmed the full 120 cm loop on 2026-09-06
@@ -109,6 +121,12 @@ export default {
         // random. Below this RMS the crest rule reports nothing rather than
         // raising an alarm about a stationary machine.
         vibrationCrestMinRmsG: 0.05,
+        // A planned-inspection alarm needs the breach on this many CONSECUTIVE
+        // new samples of the rule's channel (nodes publish every 500 ms, so 3
+        // is 1.5 s). The 6 Sept healthy run had two single-frame crest spikes
+        // (6.16 and 7.90) that alarmed a sound belt. Urgent and critical
+        // breaches (2x the limit or more) still alarm on the first sample.
+        persistSamples: 3,
         speedTolerancePct: 20,     // deviation of motor_rpm from nominalRpm, %
       },
     },

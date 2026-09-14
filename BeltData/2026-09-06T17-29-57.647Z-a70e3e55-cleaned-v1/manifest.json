@@ -1,0 +1,54 @@
+{
+  "dataset_version": 1,
+  "source_session_id": "2026-09-06T17-29-57.647Z-a70e3e55",
+  "created_at_utc": "2026-09-06T18:24:06.784204+00:00",
+  "source_directory": "/Users/shubhang/dev/work/sih-hardware-shit/PRAVAAH/data/recordings/2026-09-06T17-29-57.647Z-a70e3e55",
+  "source_sha256": {
+    "session.json": "8242711e95c45596c125ab79eddae51556c7f0cb9ce5874e04f7da1aa30d59ac",
+    "summary.json": "f7293b8af806e4bad0b4495e1e7f6c3471a352d52dcc65addea13b7a7ba88d5e",
+    "frames.jsonl": "1a2f2a9bac6b25ab07579bdd2eea5a05a64c9ad57a78b58e242aa6539cf9f780",
+    "telemetry.csv": "41a088756f980a68d2a522ae773ff320b954709ee74868f20a4b82937608208f"
+  },
+  "label": "unlabelled",
+  "source": "live",
+  "end_trim_seconds": 300,
+  "keep_before_ms": 1788718240216,
+  "keep_before_utc": "2026-09-06T18:10:40.216000+00:00",
+  "disconnect_threshold_seconds": 5,
+  "reconnect_guard_seconds": 2,
+  "scope": "Keep periods when all three streams have complete, sensor-healthy, schema-valid readings",
+  "source_telemetry_rows": 11480,
+  "kept_telemetry_rows": 6527,
+  "removed_telemetry_rows": 4953,
+  "kept_rows_by_node": {
+    "esp32-vibration-01": 2192,
+    "esp32-thermal-01": 2173,
+    "esp32-marker-01": 2162
+  },
+  "retained_interval_seconds": 1092.053,
+  "segment_count": 78,
+  "transport_exclusions": [
+    {
+      "start_ms": 1788715860158,
+      "end_ms": 1788716141627,
+      "reasons": [
+        "usb_stream_gap"
+      ]
+    },
+    {
+      "start_ms": 1788716747906,
+      "end_ms": 1788717368303,
+      "reasons": [
+        "usb_stream_gap"
+      ]
+    }
+  ],
+  "invalid_source_frame_counts_by_reason_overlapping": {
+    "sensor_health_not_healthy": 589,
+    "required_measurement_missing": 436,
+    "outside_recorded_channel_range": 740
+  },
+  "grouping": "Keep this entire source session/day in one ML split. Never window across segment_id boundaries.",
+  "qualification": "Unlabelled telemetry subset; range checks do not prove mechanical health or rule out in-range Hall artifacts.",
+  "operations": "No resampling, interpolation, zero filling, clock compression, sensor value changes, or fault labels added."
+}

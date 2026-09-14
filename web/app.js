@@ -1,3 +1,10 @@
+import {
+  attachModelFullscreen, filterComponents, historyCSV, axisRange, formatTime, nodeName,
+  humanReason, sustainedML, RULE_TEXT, ruleTitle, ENGINEERING_CHANNELS,
+} from './dashboard-ui.js';
+import { statusReportHTML } from './readiness.js';
+import { motionReading, advanceMotion, motionFaces, miningMaterialFaces, rollerMotionFaces } from './belt-motion.js';
+
 // PRAVAAH dashboard client.
 //
 // Rendering rule for this whole file: a value is drawn only if the server
@@ -14,23 +21,26 @@ const RISK_WORD = {
   urgent_inspection: 'URGENT INSPECTION',
   critical: 'CRITICAL',
 };
-// Must track the semantic ladder in style.css. Amber is the cap-lamp colour
-// and is deliberately absent here — it lights the room, it is not a state.
+// Must track the semantic ladder in style.css. Teal is reserved for controls
+// and chart traces; it does not indicate equipment health.
 const RISK_COLOR = {
-  unknown: '#4a4640', healthy: '#6f9e46', observe: '#c4a52c',
+  unknown: '#97a9b6', healthy: '#6f9e46', observe: '#c4a52c',
   planned_inspection: '#d08a22', urgent_inspection: '#d05f26', critical: '#cc3a2e',
 };
-const LAMP = '#e0a03c';
+const LAMP = '#42d6c4';
 const GROUP_TITLE = {
   drive: 'Drive', vibration: 'Vibration', thermal: 'Thermal',
   tracking: 'Tracking', acoustic: 'Acoustic', load: 'Load',
 };
 const DERIVED = new Set(['slip_ratio', 'temperature_delta']);
+// Firmware health keys, as an operator would name the part.
+const HEALTH_NAME = { mlx: 'IR thermometer', speed: 'Hall sensor', vibration: 'accelerometer', camera: 'camera' };
 
 let snap = null;
 let snapshotReceivedAt = 0;
 let activeConveyor = null;
 let openJoint = null;
+let drawerRequest = 0;
 
 // ------------------------------------------------------------ formatting
 
@@ -55,11 +65,27 @@ function ago(ts) {
   return `${Math.floor(h / 24)}d ago`;
 }
 
-const clock = () => {
-  const d = new Date();
-  return [d.getHours(), d.getMinutes(), d.getSeconds()]
-    .map((n) => String(n).padStart(2, '0')).join(':');
+// Every time on screen is plant time (config.timeZone), labelled. Exports stay UTC.
+const plantTime = (ts) => formatTime(ts, snap?.server?.timeZone ?? null);
+const plantDayTime = (ts) => {
+  if (!Number.isFinite(ts)) return 'never';
+  let day = '';
+  try {
+    day = new Intl.DateTimeFormat('en-GB', { day: '2-digit', month: 'short',
+      ...(snap?.server?.timeZone ? { timeZone: snap.server.timeZone } : {}) }).format(ts);
+  } catch { /* unknown zone */ }
+  return `${day} ${plantTime(ts)}`.trim();
 };
+const clock = () => plantTime(Date.now());
+
+// Per-viewer preferences. Storage can be unavailable (private mode); the page
+// must work regardless.
+const storage = {
+  get: (k) => { try { return localStorage.getItem(k); } catch { return null; } },
+  set: (k, v) => { try { localStorage.setItem(k, v); } catch { /* not persisted */ } },
+};
+
+const parseEvidence = (a) => { try { return a?.evidence ? JSON.parse(a.evidence) : null; } catch { return null; } };
 
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g,
   (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -89,32 +115,80 @@ function connect() {
 
 function setLink(up) {
   $('wsDot').className = `dot ${up ? 'on' : 'off'}`;
-  $('wsLabel').textContent = up ? 'LINK UP' : 'LINK DOWN';
+  $('wsLabel').textContent = up ? 'GATEWAY ONLINE' : 'RECONNECTING';
+  if (snap) render();
 }
+
+const gatewayLive = () => ws?.readyState === WebSocket.OPEN && Date.now() - snapshotReceivedAt < 10000;
 
 // ---------------------------------------------------------------- render
 
 const ML_STATUS = { NORMAL: 'Within baseline range', WATCH: 'Baseline deviation',
   WARNING: 'High baseline deviation', CRITICAL: 'Very high baseline deviation' };
+// Recent scored windows. One window is 2.5 s; the headline only reports a
+// status that held for three consecutive windows, so a single spike cannot
+// flash CRITICAL next to a HEALTHY rule verdict and vanish again.
+const mlWindows = [];
 function renderML(cv) {
   const ml = cv.ml;
   const gatewayNow = snap.server.now + Date.now() - snapshotReceivedAt;
   const fresh = ws?.readyState === WebSocket.OPEN && ml?.type === 'condition'
     && ml.data_quality === 'valid' && Number.isFinite(ml.end_ms)
     && gatewayNow - ml.end_ms <= 5000 && gatewayNow >= ml.end_ms - 1000;
-  $('mlStatus').textContent = fresh ? (ML_STATUS[ml.status] ?? 'Baseline deviation')
-    : ml?.status === 'WARMING_UP' && ws?.readyState === WebSocket.OPEN ? 'Collecting a full window' : 'Data unavailable';
-  $('mlScore').textContent = fresh && Number.isFinite(ml.anomaly_score) ? `${ml.anomaly_score.toFixed(1)} / 100` : '';
-  $('mlDetail').textContent = fresh
-    ? `${ml.window_seconds}s window · ${ml.driver_sensor} contributed most. ${ml.explanation ?? ''}`
-    : ws?.readyState !== WebSocket.OPEN ? 'Gateway connection interrupted.'
+  if (fresh && !mlWindows.some((w) => w.end_ms === ml.end_ms)) {
+    mlWindows.push(ml);
+    if (mlWindows.length > 12) mlWindows.shift();
+  }
+  const s = fresh ? sustainedML(mlWindows) : null;
+  const shown = s?.sustained ?? null;
+
+  if (fresh && !shown) {
+    $('mlStatus').textContent = 'Confirming';
+    $('mlScore').textContent = '';
+    $('mlDetail').textContent = 'A status is reported once it holds for three consecutive 10-second windows (about 7 s).';
+  } else if (fresh) {
+    $('mlStatus').textContent = ML_STATUS[shown.status] ?? 'Baseline deviation';
+    $('mlScore').textContent = Number.isFinite(shown.anomaly_score) ? `${shown.anomaly_score.toFixed(1)} / 100` : '';
+    $('mlDetail').textContent = `Held for three consecutive windows. ${shown.explanation ?? ''}`;
+  } else {
+    $('mlStatus').textContent = ml?.status === 'WARMING_UP' && ws?.readyState === WebSocket.OPEN ? 'Collecting a full window' : 'Data unavailable';
+    $('mlScore').textContent = '';
+    $('mlDetail').textContent = ws?.readyState !== WebSocket.OPEN ? 'Gateway connection interrupted.'
       : ml?.type === 'condition' ? 'Waiting for fresh readings from all three sensors.'
-        : (ml?.reason ?? 'The ML service is unavailable.');
+        : humanReason(ml?.reason ?? 'The ML service is unavailable.');
+  }
+
+  const note = $('mlTransient');
+  note.hidden = !(fresh && s?.transient);
+  if (!note.hidden) {
+    note.textContent = `Brief ${s.latest.status.toLowerCase()} window (${s.latest.anomaly_score.toFixed(1)}) at `
+      + `${plantTime(s.latest.end_ms)}; not sustained, so not reported as the condition.`;
+  }
+
+  // One sentence reconciling the two verdicts, so they never silently disagree.
+  const agree = $('mlAgree');
+  agree.hidden = !(fresh && shown);
+  if (!agree.hidden) {
+    const mlNormal = shown.status === 'NORMAL';
+    const ruleAlarm = cv.alarms.length > 0;
+    agree.textContent = !ruleAlarm && mlNormal ? 'Rules and ML baseline agree: operating normally.'
+      : !ruleAlarm ? 'ML sees a sustained deviation that no rule has confirmed. No alarm raised; worth a visual check.'
+        : mlNormal ? 'A rule alarm is open while the ML baseline reads normal. Check whether it came from a brief event.'
+          : 'Rules and the ML baseline both indicate a problem.';
+  }
 }
 
 function currentConveyor() {
   if (!snap?.conveyors?.length) return null;
-  return snap.conveyors.find((c) => c.id === activeConveyor) ?? snap.conveyors[0];
+  const cv = snap.conveyors.find((c) => c.id === activeConveyor) ?? snap.conveyors[0];
+  if (gatewayLive()) return cv;
+  // Preserve historical values but invalidate live claims after a lost feed.
+  return { ...cv, risk: 'unknown', riskSource: 'Gateway feed unavailable', operating_state: 'unknown',
+    channels: Object.fromEntries(Object.entries(cv.channels).map(([key, c]) => [key,
+      { ...c, state: c.state === 'never' ? 'never' : 'offline' }])),
+    components: (cv.components ?? []).map(c => c.state === 'unmonitored' ? c
+      : { ...c, state: 'blind', causes: [], worstRatio: null, rulesEvaluated: [] }) };
+
 }
 
 function render() {
@@ -122,14 +196,15 @@ function render() {
   const cv = currentConveyor();
   activeConveyor = cv?.id ?? null;
 
-  $('siteLabel').textContent = snap.server.site;
-  $('mqttDot').className = `dot ${snap.mqtt.connected ? 'on' : 'off'}`;
-  $('mqttLabel').textContent = snap.mqtt.connected
-    ? `BROKER :${snap.mqtt.port}` : 'BROKER DOWN';
+  $('siteLabel').textContent = snap.server.siteLabel ?? snap.server.site;
+  $('mqttDot').className = `dot ${gatewayLive() && snap.mqtt.connected ? 'on' : 'off'}`;
+  $('mqttLabel').textContent = !gatewayLive() ? 'BROKER UNKNOWN'
+    : snap.mqtt.connected ? 'SENSOR BROKER ONLINE' : 'BROKER DOWN';
 
   renderTabs();
   if (!cv) return;
 
+  renderOverview(cv);
   renderBanner(cv);
   renderRisk(cv);
   renderML(cv);
@@ -145,13 +220,32 @@ function render() {
   if (openJoint) refreshDrawer(cv);
 }
 
+function renderOverview(cv) {
+  const connected = gatewayLive();
+  const channels = Object.values(cv.channels);
+  const live = channels.filter(c => c.state === 'live').length;
+  const fixed = (cv.components ?? []).filter(c => !c.joint);
+  const evaluated = fixed.filter(c => c.rulesEvaluated?.length).length;
+  $('assetName').textContent = `${cv.id} / ${cv.label ?? 'Conveyor'}`;
+  $('assetMeta').textContent = `${snap.server.siteLabel ?? snap.server.site} · ${connected ? 'Gateway connected' : 'Connection interrupted'}`;
+  $('summaryCondition').textContent = connected ? (RISK_WORD[cv.risk] ?? 'NO DATA') : 'OFFLINE';
+  $('summaryCondition').style.color = RISK_COLOR[cv.risk] ?? RISK_COLOR.unknown;
+  $('summaryConditionNote').textContent = cv.lastMessageTs === null ? 'Waiting for the first sensor packet' : `Last sensor packet ${ago(cv.lastMessageTs)}`;
+  $('summaryChannels').textContent = `${live} / ${channels.length}`;
+  $('summaryChannelsNote').textContent = live ? 'Channels currently reporting' : 'No live sensor channels';
+  $('summaryAlarms').textContent = cv.alarms.length;
+  $('navAlarmCount').textContent = cv.alarms.length;
+  $('summaryAlarmsNote').textContent = !connected ? 'Last received alarm records' : cv.alarms.length ? 'Review findings and plan maintenance' : cv.lastMessageTs === null ? 'No data evaluated yet' : 'No open alarm records';
+  $('summaryCoverage').textContent = `${evaluated} / ${fixed.length}`;
+}
+
 function renderTabs() {
   const el = $('conveyorTabs');
   el.innerHTML = snap.conveyors.map((c) =>
     `<button data-id="${esc(c.id)}" aria-current="${c.id === activeConveyor}">${esc(c.id)}</button>`
   ).join('');
   for (const b of el.querySelectorAll('button')) {
-    b.onclick = () => { activeConveyor = b.dataset.id; render(); loadTrend(); };
+    b.onclick = () => { if (openJoint) closeDrawer(); activeConveyor = b.dataset.id; resetComponent(); render(); loadTrend(); };
   }
 }
 
@@ -163,14 +257,20 @@ function renderBanner(cv) {
   // say so loudly - nothing on screen is a measurement while it runs.
   const bench = snap.nodes.some((n) => n.state !== 'offline' && /^bench/i.test(n.node));
 
-  if (bench) {
+  if (!gatewayLive()) {
+    b.className = 'banner'; b.dataset.kind = 'alert';
+    b.textContent = 'Gateway connection interrupted. Readings are historical; live condition is unavailable. Reconnecting automatically.';
+  } else if (bench) {
     b.className = 'banner';
     b.dataset.kind = 'alert';
     b.textContent = 'BENCH SOURCE ACTIVE — frames are coming from tools/bench-publisher.js, not from hardware. Nothing on this screen is a measurement.';
   } else if (noData) {
     b.className = 'banner';
     b.dataset.kind = 'wait';
-    b.textContent = `WAITING FOR FIRST PACKET — publish to beltguard/${snap.server.site}/${cv.id}/telemetry on mqtt://<this-machine>:${snap.mqtt.port}`;
+    b.textContent = 'Ready to monitor. Connect a sensor node to start receiving measurements and evaluating conveyor condition.';
+  } else if (cv.risk === 'critical' || cv.risk === 'urgent_inspection') {
+    b.className = 'banner'; b.dataset.kind = 'alert';
+    b.textContent = `${RISK_WORD[cv.risk]} — ${cv.alarms[0]?.message ?? 'Review active findings.'}`;
   } else if (missingGeom) {
     b.className = 'banner';
     b.dataset.kind = 'wait';
@@ -181,11 +281,7 @@ function renderBanner(cv) {
     ].filter(([key]) => !(cv.geometry[key] > 0)).map(([, label]) => label);
     const loop = cv.geometry.beltLengthM > 0
       ? `BELT LOOP ${cv.geometry.beltLengthM.toFixed(2)} m — ` : '';
-    b.textContent = `${loop}Additional measurements needed for geometry-based rules: ${missing.join(', ')}. Hall belt RPM is measured directly from magnet passes.`;
-  } else if (cv.risk === 'critical' || cv.risk === 'urgent_inspection') {
-    b.className = 'banner';
-    b.dataset.kind = 'alert';
-    b.textContent = `${RISK_WORD[cv.risk]} — ${cv.alarms[0]?.message ?? ''}`;
+    b.textContent = `${loop}Asset settings incomplete: ${missing.join(', ')}. Belt-slip checks stay off until these are measured on the machine.`;
   } else {
     b.className = 'banner hidden';
   }
@@ -218,14 +314,14 @@ function renderRisk(cv) {
 // that only works if the picture is of their machine.
 //
 // The discipline that matters is UNMONITORED - a component nothing can see is
-// drawn as bare dark metal with a dashed outline, never green, because "we
+// drawn as bare neutral metal, never green, because "we
 // have no sensor here" and "this part is fine" must never look the same. Most
 // of this machine is unmonitored today, and the model says so.
 
 const COMP_COLOR = {
-  unmonitored: '#3a3830',
-  no_rule: '#7f776a',
-  blind: '#6b6459',
+  unmonitored: '#687988',
+  no_rule: '#8a9ca8',
+  blind: '#8a9ca8',
   healthy: '#6f9e46',
   observe: '#c4a52c',
   planned_inspection: '#d08a22',
@@ -249,17 +345,17 @@ const GROUP_LABEL = {
 const ALERT = new Set(['urgent_inspection', 'critical']);
 // States where we cannot vouch for the part: drawn as unlit metal, not colour.
 const VAGUE = new Set(['unmonitored', 'no_rule', 'blind']);
-// Unlit machine steel. It has to sit ABOVE the panel background once shaded,
+// Neutral machine steel. It has to sit ABOVE the panel background once shaded,
 // or an unmonitored part reads as a hole in the picture rather than as metal.
-const STEEL = '#5b6472';
-const DARK_STEEL = '#464d58';
-const RUBBER = '#31363e';
-const COAL = '#232830';
+const STEEL = '#9badbd';
+const DARK_STEEL = '#627381';
+const RUBBER = '#303a43';
+const COAL = '#263039';
 // Ambient floor per part. High enough that a face turned away from the cap
 // lamp is still legible - an operator must be able to see the whole machine -
 // but low enough that the machine still has form. The base colours above are
 // lifted to compensate, so the darkest face is still clearly metal.
-const AMB = 0.40;
+const AMB = 0.64;
 
 // Model dimensions, in arbitrary units. +x along the belt, +y up, +z across.
 const M = {
@@ -299,61 +395,193 @@ const RETURN_X = [-150, -60, 40, 140];
 const LEG_X = [-190, -95, 0, 95, 190];
 const DRIVE_Z = 92;         // gearbox centre, outboard of the head bearing
 const MOTOR_Z = 170;
+// Bench rig (conveyor `model: 'bench'`), drawn in the same model frame.
+const BENCH = { sideZ: M.face / 2 + 7, gz: M.face / 2 + 37, irX: -30, floorY: M.cy - 70 };
 
-// Detail levels. A drag redraws ~500 faces; the settled frame draws ~1100.
-// Dropping detail mid-gesture keeps the orbit at pointer rate on a plant
-// laptop, and the frame an operator actually reads is always the full one.
-const LOD = {
-  full: { run: 15, wrap: 10, cols: 6, pulley: 18, roll: 9, small: 8, detail: true },
-  fast: { run: 8, wrap: 6, cols: 4, pulley: 10, roll: 6, small: 6, detail: false },
-};
+// Keep identical geometry through zoom, orbit and telemetry updates.
+const DETAIL = { run: 24, wrap: 18, cols: 6, pulley: 36, roll: 16, small: 12, detail: true };
 
 // A long machine on one screen wants a LONG lens: raising dist and focal
 // together keeps the size but flattens the perspective, so the conveyor
 // reads as a machine drawing rather than a wide-angle photograph of one.
-const cam = { yaw: -0.66, pitch: 0.36, dist: 1420, focal: 1420, cx: 389, cy: 194 };
+const cam = { yaw: -0.66, pitch: 0.36, dist: 1420, focal: 1420, cx: 389, cy: 194, tx: 0, ty: 0, tz: 0 };
 const HOME = { ...cam };
 
 let compIndex = {};
 let lastCv = null;
-let focusComp = null;      // part highlighted from the roster panel
+let partPoints = {};
+let viewport = null;
+let preparedFaces = [];
+let cameraAnimation = 0;
+let focusComp = null;      // component currently being inspected
+const motion = { phase: 0, rotation: 0, travel: 0, at: null };
+const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)');
+let motionEnabled = storage.get('pravaah.motion') !== 'off' && !reducedMotion.matches;
+let motionVisible = true;
+let motionRaf = 0;
+let motionFrameAt = 0;
+let sceneCache = null;
+
+function beltDrive() {
+  const channel = lastCv?.channels?.belt_speed;
+  const node = snap?.nodes?.find(n => n.node === channel?.node);
+  return motionReading(lastCv, {
+    connected: gatewayLive(), enabled: motionEnabled,
+    now: snap ? snap.server.now + Date.now() - snapshotReceivedAt : Date.now(),
+    nodeOnline: !node || node.state === 'live',
+  });
+}
+
+function renderMotionStatus(reading = beltDrive()) {
+  const speed = reading.speed === null ? '' : ` · ${reading.speed.toFixed(3)} m/s`;
+  const words = { moving: 'Belt moving', stopped: 'Belt stopped', paused: 'Animation paused',
+    unavailable: 'Motion held · speed unavailable', unconfigured: 'Set belt loop length to animate' };
+  $('motionReadout').dataset.state = reading.status;
+  $('motionStatus').textContent = words[reading.status] + speed;
+  $('motionSource').textContent = lastCv?.playback
+    ? `Recorded playback${lastCv.playback.loop ? ` · looping (${lastCv.playback.cycle ?? 1})` : ''} · ${lastCv.playback.rate}× · ${plantTime(lastCv.playback.recorded_at_ms)}`
+    : 'Live sensor feed · motion follows measured belt speed';
+  $('modelMotion').setAttribute('aria-pressed', String(motionEnabled));
+  $('modelMotion').textContent = motionEnabled ? 'Pause motion' : 'Resume motion';
+}
+
+function scheduleMotion() {
+  if (motionRaf || !motionVisible || document.hidden || beltDrive().status !== 'moving') return;
+  motionRaf = requestAnimationFrame(frame => {
+    motionRaf = 0;
+    if (!motionVisible || document.hidden) { motion.at = null; return; }
+    // Reuse the static geometry and labels. Only belt/pulley marks are rebuilt.
+    if (frame - motionFrameAt >= 1000 / (viewport?.ready === false || !viewport ? 24 : 60) - .5) {
+      motionFrameAt = frame;
+      const reading = beltDrive();
+      advanceMotion(motion, reading, frame, M);
+      try { paintScene(); } catch (err) { fatal('belt animation', err); return; }
+      if (reading.status !== 'moving') { motion.at = null; renderMotionStatus(reading); }
+    }
+    scheduleMotion();
+  });
+}
+
+function resetMotionClock() {
+  if (motionRaf) cancelAnimationFrame(motionRaf);
+  motionRaf = 0;
+  motion.at = null;
+  motionFrameAt = 0;
+}
+
+$('modelMotion').onclick = () => {
+  motionEnabled = !motionEnabled;
+  storage.set('pravaah.motion', motionEnabled ? 'on' : 'off');
+  resetMotionClock(); renderMotionStatus(); scheduleMotion();
+};
+reducedMotion.addEventListener('change', event => {
+  if (event.matches) { motionEnabled = false; resetMotionClock(); renderMotionStatus(); }
+});
+document.addEventListener('visibilitychange', () => { resetMotionClock(); scheduleMotion(); });
+new IntersectionObserver(entries => {
+  motionVisible = entries[0].isIntersecting;
+  resetMotionClock(); scheduleMotion();
+}).observe($('schematic'));
 
 const compColor = (state) => COMP_COLOR[state] ?? COMP_COLOR.unmonitored;
 
 /** Colour a part carries in the scene: status colour, or bare steel. */
 function partPaint(state, base = STEEL) {
   return VAGUE.has(state)
-    ? { color: base, stroke: compColor(state), dash: '4 3' }
+    ? { color: base, stroke: null }
     : { color: compColor(state), stroke: null };
 }
 
+let benchFramed = false;
 function renderSchematic(cv) {
+  $('modelEmpty').hidden = true;
+  if (lastCv?.id !== cv.id) { resetMotionClock(); motion.phase = 0; motion.rotation = 0; motion.travel = 0; }
   lastCv = cv;
+  if (beltDrive().status !== 'moving') resetMotionClock();
+  renderMotionStatus();
+  // The bench rig has no hopper, drive train or legs sticking out, so at the
+  // mining camera distance it fills a third of the view. Pull every preset in
+  // once, so it fills the viewport the way the mining model does.
+  if (cv.geometry?.model === 'bench' && !benchFramed) {
+    benchFramed = true;
+    for (const v of [cam, HOME, ...Object.values(VIEWS)]) v.dist = Math.round(v.dist * 0.7);
+  }
   compIndex = {};
   for (const c of cv.components ?? []) compIndex[c.id] = c;
   requestDraw(false);
+  scheduleMotion();
 }
 
 // One redraw per animation frame at most. Without this, a fast drag queues
 // more full scene rebuilds than the browser can retire and the view lags
 // behind the pointer.
 let rafId = 0;
-let pendingFast = false;
-function requestDraw(fast) {
-  pendingFast = fast;
+function requestDraw() {
   if (rafId) return;
   rafId = requestAnimationFrame(() => {
     rafId = 0;
-    try { drawScene(pendingFast); } catch (err) { fatal('3D scene', err); }
+    try { drawScene(); } catch (err) { fatal('3D scene', err); }
   });
 }
 
-function drawScene(fast = false) {
+/**
+ * The team's bench rig as photographed (ConveryBelt/): a short flat belt on an
+ * aluminium profile frame, two plain end pulleys, painted end brackets standing
+ * on the floor, and a right-angle gear motor on the head shaft. No idlers,
+ * hopper, take-up, scraper or pull-cord: drawing those would claim equipment
+ * the demo machine does not have. The belt itself is lofted by drawScene.
+ */
+function drawBenchRig(faces, q, paint, plain) {
+  const { x0, x1, cy, r, face } = M;
+  const { sideZ, gz, irX, floorY } = BENCH;
+  const ALU = '#b3bec7', PLATE = '#c3cad1';
+
+  // End pulleys and their shafts.
+  for (const [x, id] of [[x0, 'tail_pulley'], [x1, 'drive_pulley']]) {
+    faces.push(...Scene3D.cylinderZ([x, cy, 0], r - 1.5, face, q.pulley, paint(id, '#d5dade')));
+    faces.push(...Scene3D.cylinderZ([x, cy, 0], 4.5, face + 30, q.small, paint(id)));
+  }
+
+  // Aluminium profile frame between the pulleys, with a T-slot line on each face.
+  for (const s of [-1, 1]) {
+    faces.push(...Scene3D.box([0, cy, s * sideZ], [x1 - x0 - 10, 2 * r - 12, 8], plain(ALU)));
+    faces.push(...Scene3D.box([0, cy, s * (sideZ + 4.5)], [x1 - x0 - 10, 2.5, 1.5], plain('#7f8b95')));
+  }
+
+  // Painted end brackets: wide along the frame, narrowing to a foot on the floor.
+  for (const [x, dir] of [[x0, -1], [x1, 1]]) {
+    for (const s of [-1, 1]) {
+      const z = s * (sideZ + 6);
+      const top = cy + 10, inner = x - dir * 70, outer = x + dir * 14;
+      faces.push({
+        pts: [[inner, top, z], [outer, top, z], [x + dir * 4, floorY, z], [x - dir * 34, floorY, z]],
+        color: PLATE, ambient: AMB, edge: true, material: 'paint', twoSided: true,
+      });
+      faces.push(...Scene3D.box([x - dir * 15, floorY - 1.5, z], [44, 3, 14], plain('#8f9aa3')));
+      // Shaft bearings bolted to the bracket. Only the head side is a rule-bearing part.
+      faces.push(...Scene3D.box([x, cy, s * (sideZ + 10)], [16, 16, 8],
+        x === x1 ? paint('drive_bearing') : plain('#9aa5ae')));
+    }
+  }
+
+  // Right-angle gear motor on the head shaft, outboard of the near bracket:
+  // gearbox on the shaft, motor body running out past the head and down.
+  faces.push(...Scene3D.box([x1 + 4, cy - 4, gz], [40, 42, 34], paint('gearbox', '#9aa6b0')));
+  faces.push(...Scene3D.cylinderZ([x1 + 4, cy - 4, gz + 19], 12, 6, q.small, paint('gearbox', '#7c8791')));
+  const m0 = [x1 + 24, cy - 12, gz], m1 = [x1 + 92, cy - 48, gz];
+  faces.push(...Scene3D.cylinderBetween(m0, m1, 16, q.pulley, paint('drive_motor', '#8d98a2')));
+  faces.push(...Scene3D.cylinderBetween(m1, [m1[0] + 6, m1[1] - 3.2, gz], 13, q.small, paint('drive_motor', '#3b5f8a')));
+
+  // The single spot the IR thermometer reads, as a patch on the carrying run.
+  faces.push(...Scene3D.box([irX, cy + r + 1.8, 0], [34, 1.2, M.width * 0.5], paint('idlers', '#5b6b76')));
+}
+
+function drawScene() {
   const cv = lastCv;
   if (!cv) return;
   const svg = $('schematic');
   if (!svg) return;
-  const q = fast ? LOD.fast : LOD.full;
+  const q = DETAIL;
   const { x0, x1, cy, r, hw, face } = M;
   const st = (id) => compIndex[id]?.state ?? 'unmonitored';
   const faces = [];
@@ -361,10 +589,13 @@ function drawScene(fast = false) {
   /** Attribute bundle for a hit-testable part. */
   const paint = (id, base = STEEL) => {
     const p = partPaint(st(id), base);
-    return { color: p.color, stroke: p.stroke, dash: p.dash, comp: id, ambient: AMB, edge: true };
+    const material = base === RUBBER ? 'rubber'
+      : ['drive_motor', 'gearbox', 'loading_chute', 'pull_cord'].includes(id) ? 'paint' : 'steel';
+    return { color: p.color, stroke: p.stroke, dash: p.dash, comp: id, ambient: AMB, edge: true,
+      material, textureStrength: VAGUE.has(st(id)) ? 1 : 0.35 };
   };
   /** Bare structure: visible, but not a component anything reports on. */
-  const plain = (color = DARK_STEEL, extra = {}) => ({ color, ambient: AMB, edge: true, ...extra });
+  const plain = (color = DARK_STEEL, extra = {}) => ({ color, ambient: AMB, edge: true, material: 'paint', ...extra });
 
   // ---- the belt itself, lofted along the closed path.
   //
@@ -374,7 +605,9 @@ function drawScene(fast = false) {
   const path = Scene3D.beltPath({
     x0, x1, cy, r, runSegs: q.run, wrapSegs: q.wrap, taper: M.taper,
   });
-  const secOpts = { width: M.width, troughRise: M.trough, flat: M.flat, cols: q.cols };
+  const bench = cv.geometry?.model === 'bench';
+  // The bench rig runs a flat belt; the mining conveyor is troughed.
+  const secOpts = { width: M.width, troughRise: bench ? 0 : M.trough, flat: M.flat, cols: q.cols };
   const secs = path.map((s) => Scene3D.beltSection(s, secOpts));
   {
     const pt = partPaint(st('belt_tracking'), RUBBER);
@@ -389,8 +622,8 @@ function drawScene(fast = false) {
         faces.push({
           pts: [A[k], A[k + 1], B[k + 1], B[k]],
           color: p.color, comp: id, twoSided: true, ambient: AMB,
-          // Only the two edge columns carry the dashed outline. Outlining all
-          // 240 quads of an unmonitored belt would be a hatch, not a signal.
+          material: 'rubber', textureStrength: VAGUE.has(st(id)) ? 1 : 0.35,
+          // Keep the interior of the belt free of a distracting wire grid.
           stroke: k === 0 || k === A.length - 2 ? p.stroke : null,
           dash: p.dash,
         });
@@ -398,43 +631,21 @@ function drawScene(fast = false) {
     }
   }
 
-  // ---- the load. Heaped in the trough, starting under the chute and running
-  //      off at the head - a bare belt reads as a machine drawing, loaded it
-  //      reads as the plant this actually monitors.
-  {
-    const LOAD_FROM = x0 + 62, LOAD_TO = x1 - 6;
-    const cols = q.cols;
-    const heapAt = (x) => {
-      const inRun = Math.min((x - LOAD_FROM) / 40, (LOAD_TO - x) / 26, 1);
-      if (inRun <= 0) return 0;
-      return inRun * 15 * (0.78 + 0.16 * Math.sin(x * 0.071) + 0.1 * Math.sin(x * 0.023));
-    };
-    const section = (x) => {
-      const h = heapAt(x), tr = troughAt(x), pts = [];
-      for (let i = 0; i <= cols; i++) {
-        const t = -1 + (2 * i) / cols;
-        const a = Math.abs(t);
-        const rise = a <= M.flat ? 0 : ((a - M.flat) / (1 - M.flat)) * M.trough * hw;
-        const heap = Math.max(0, 1 - (a / 0.9) ** 2) * h;
-        pts.push([x, cy + r + 1.4 + rise * tr + heap, t * hw * 0.97]);
-      }
-      return pts;
-    };
-    const steps = q.detail ? 26 : 12;
-    const xs = Array.from({ length: steps + 1 },
-      (_, i) => LOAD_FROM + ((LOAD_TO - LOAD_FROM) * i) / steps);
-    faces.push(...Scene3D.loft(xs.map(section), { color: COAL, ambient: AMB }));
-  }
+  if (bench) {
+    drawBenchRig(faces, q, paint, plain);
+  } else { // ---- mining conveyor geometry, through the pull-cord
+
+  // The coal bed and fragments are drawn in the moving layer in paintScene().
 
   // ---- head (drive) pulley, tail pulley, and the shaft through each
   for (const [x, id] of [[x0, 'tail_pulley'], [x1, 'drive_pulley']]) {
-    faces.push(...Scene3D.cylinderZ([x, cy, 0], r, face, q.pulley, paint(id)));
+    faces.push(...Scene3D.cylinderZ([x, cy, 0], r - 1.5, face, q.pulley, paint(id)));
     // End discs read as the pulley crown without poking through the belt.
     for (const s of [-1, 1]) {
       faces.push(...Scene3D.cylinderZ([x, cy, s * (face / 2 + 1)], r + 2.5, 2.5, q.pulley,
-        plain('#3d434c')));
+        paint(id, '#3d434c')));
     }
-    faces.push(...Scene3D.cylinderZ([x, cy, 0], 5.5, face + 46, q.small, plain(STEEL)));
+    faces.push(...Scene3D.cylinderZ([x, cy, 0], 5.5, face + 46, q.small, paint(id)));
   }
 
   // ---- snub and bend pulleys, tucked under the return run
@@ -455,7 +666,7 @@ function drawScene(fast = false) {
   for (const s of [-1, 1]) {
     const z = s * (face / 2 + 16);
     faces.push(...Scene3D.box([x0 + 2, cy, z], [30, 30, 24], paint('takeup')));
-    faces.push(...Scene3D.cylinderZ([x0 - 26, cy, z], 3.5, 56, q.small, paint('takeup')));
+    faces.push(...Scene3D.cylinderBetween([x0 - 52, cy, z], [x0 + 2, cy, z], 3.5, q.small, paint('takeup')));
     faces.push(...Scene3D.box([x0 - 52, cy, z], [10, 14, 14], paint('takeup')));
   }
 
@@ -469,7 +680,27 @@ function drawScene(fast = false) {
   faces.push(...Scene3D.cylinderZ([x1, cy, MOTOR_Z], 17, 56, q.pulley, paint('drive_motor')));
   faces.push(...Scene3D.box([x1, cy + 20, MOTOR_Z], [24, 12, 28], paint('drive_motor')));
   for (const zz of [MOTOR_Z - 22, MOTOR_Z + 22]) {
-    faces.push(...Scene3D.box([x1, cy - 24, zz], [30, 14, 8], plain('#40464f')));
+    faces.push(...Scene3D.box([x1, cy - 24, zz], [30, 14, 8], paint('drive_motor', '#40464f')));
+  }
+
+  // Motor cooling fins, fan cover and gearbox casing bolts remain part of
+  // their parent component for picking and health colouring.
+  for (let i = 0; i < 12; i++) {
+    const angle = i / 12 * Math.PI * 2;
+    const x = x1 + Math.cos(angle) * 18;
+    const y = cy + Math.sin(angle) * 18;
+    faces.push(...Scene3D.cylinderBetween([x, y, MOTOR_Z - 21], [x, y, MOTOR_Z + 21],
+      1.6, 6, paint('drive_motor', '#91a2b4')));
+  }
+  faces.push(...Scene3D.cylinderZ([x1, cy, MOTOR_Z + 30], 19, 5, q.pulley, paint('drive_motor', DARK_STEEL)));
+  for (const dx of [-21, 21]) for (const dy of [-18, 18]) {
+    faces.push(...Scene3D.cylinderZ([x1 + dx, cy + dy, DRIVE_Z + 23], 2.8, 4, 6, paint('gearbox', '#abb8c5')));
+  }
+  // Pulley hubs and bearing fasteners add depth without altering belt routing.
+  for (const [x, id] of [[x0, 'tail_pulley'], [x1, 'drive_pulley']]) {
+    for (const side of [-1, 1]) {
+      faces.push(...Scene3D.cylinderZ([x, cy, side * (face / 2 + 4)], 10, 6, q.roll, paint(id, '#a0aeba')));
+    }
   }
 
   // ---- troughing idler sets. Three rolls each: one flat centre roll, two
@@ -522,9 +753,20 @@ function drawScene(fast = false) {
     }
   }
 
-  // ---- loading chute and skirtboards at the tail
-  faces.push(...Scene3D.box([x0 + 52, cy + r + 50, 0], [62, 76, 66], paint('loading_chute')));
-  faces.push(...Scene3D.box([x0 + 52, cy + r + 96, 0], [78, 16, 82], plain('#40464f')));
+  // ---- open, tapered loading hopper and skirtboards at the tail.
+  // The opening and flange distinguish the feed chute from a solid enclosure.
+  const hopperX = x0 + 52, hopperTop = cy + r + 99, hopperBottom = cy + r + 18;
+  const hopperRing = (y, hx, hz) => [[hopperX - hx, y, -hz], [hopperX + hx, y, -hz],
+    [hopperX + hx, y, hz], [hopperX - hx, y, hz]];
+  const upper = hopperRing(hopperTop, 39, 41), lower = hopperRing(hopperBottom, 24, 26);
+  for (let i = 0; i < 4; i++) {
+    const j = (i + 1) % 4;
+    faces.push({ pts: [upper[i], upper[j], lower[j], lower[i]], ...paint('loading_chute'), twoSided: true });
+  }
+  for (const side of [-1, 1]) {
+    faces.push(...Scene3D.box([hopperX, hopperTop, side * 41], [86, 5, 5], paint('loading_chute')));
+    faces.push(...Scene3D.box([hopperX + side * 41, hopperTop, 0], [5, 5, 82], paint('loading_chute')));
+  }
   for (const s of [-1, 1]) {
     faces.push(...Scene3D.box([x0 + 84, cy + r + 15, s * 31], [140, 24, 4],
       paint('loading_chute')));
@@ -545,6 +787,8 @@ function drawScene(fast = false) {
   for (const x of [x0 + 110, x1 - 110]) {
     faces.push(...Scene3D.box([x, cy + r + 16, M.rail + 16], [16, 22, 13], paint('pull_cord')));
   }
+
+  } // end of mining conveyor geometry
 
   // ---- joints: bands across the carrying run, riding the trough
   const joints = cv.joints ?? [];
@@ -570,17 +814,55 @@ function drawScene(fast = false) {
   });
 
   // ---- a part picked out in the roster gets a halo so the eye lands on it
-  if (focusComp && PART_ANCHOR[focusComp]) {
+  if (focusComp) {
     for (const f of faces) if (f.comp === focusComp) f.cls = `${f.cls ? f.cls + ' ' : ''}sch-focus-part`;
   }
 
-  // ---- assemble
-  const body = Scene3D.render(faces, cam);
-  const labels = buildLabels(cv, jointBands, q);
-  svg.innerHTML = body + labels;
-
+  partPoints = {};
+  for (const f of faces) if (f.comp) (partPoints[f.comp] ??= []).push(...f.pts);
+  sceneCache = { faces, prepared: Scene3D.prepare(faces, cam), secOpts, paint, bench };
+  const focusedId = svg.contains(document.activeElement) ? document.activeElement.dataset.comp : null;
+  // Keep labels and keyboard targets stable during motion frames.
+  svg.innerHTML = `<g id="sceneSurfaces"></g><g id="sceneLabels">${buildLabels(cv, jointBands, q)}</g>`;
+  paintScene();
   wireHits(svg);
+  if (focusedId) [...svg.querySelectorAll('.sch-focus')].find(el => el.dataset.comp === focusedId)?.focus({ preventScroll: true });
   renderSchematicSummary(cv);
+}
+
+function paintScene() {
+  if (!sceneCache) return;
+  const svg = $('schematic');
+  const { faces, prepared, secOpts, paint, bench } = sceneCache;
+  const marks = motionFaces(Scene3D, M, secOpts, motion, paint, bench);
+  if (!bench) {
+    marks.push(...miningMaterialFaces(Scene3D, M, secOpts, motion));
+    const stripe = (id) => ({ ...paint(id, '#718792'), color: VAGUE.has(compIndex[id]?.state ?? 'unmonitored')
+      ? '#718792' : paint(id).color, ambient: .8 });
+    for (const set of SETS) {
+      const zc = M.flat * M.hw, yc = M.cy + M.r - set.r0 - 1.1;
+      const angle = -motion.travel / set.r0;
+      marks.push(...rollerMotionFaces([set.x, yc, -zc], [set.x, yc, zc], set.r0, angle, stripe(set.id)));
+      for (const side of [-1, 1]) marks.push(...rollerMotionFaces(
+        [set.x, yc, side * zc], [set.x, yc + M.trough * M.hw, side * M.hw * 1.05],
+        set.r0, angle * side, stripe(set.id)));
+    }
+    for (const x of RETURN_X) marks.push(...rollerMotionFaces(
+      [x, M.cy - M.r - 7.1, -M.width * .47], [x, M.cy - M.r - 7.1, M.width * .47],
+      6, motion.travel / 6, stripe('return_idlers')));
+  }
+  preparedFaces = [...prepared, ...Scene3D.prepare(marks, cam)];
+  const textures = $('modelTextures').getAttribute('aria-pressed') === 'true';
+  const drawn = viewport?.draw(preparedFaces, cam, focusComp, textures, prepared) ?? false;
+  $('schematicCanvas').hidden = !drawn;
+  svg.dataset.renderer = drawn ? 'webgl' : 'svg';
+  svg.dataset.faceCount = faces.length + marks.length;
+  svg.dataset.components = Object.keys(partPoints).length;
+  svg.dataset.motionPhase = motion.phase.toFixed(6);
+  // Labels and accessible part targets remain SVG; solid surfaces stay on GPU.
+  const surface = $('sceneSurfaces');
+  if (drawn) { if (surface.childNodes.length) surface.replaceChildren(); }
+  else surface.innerHTML = Scene3D.render([...faces, ...marks], cam, textures);
 }
 
 /**
@@ -608,7 +890,12 @@ function buildLabels(cv, jointBands, q) {
   const { x0, x1, cy, r, hw } = M;
   const out = [];
 
-  const anchors = [
+  const bench = cv.geometry?.model === 'bench';
+  const anchors = bench ? [
+    { id: 'tail_pulley', p: [x0 - 6, cy + r + 10, -(BENCH.sideZ + 26)], text: 'TAIL' },
+    { id: 'drive_pulley', p: [x1 - 6, cy + r + 34, -(BENCH.sideZ + 44)], text: 'HEAD / DRIVE' },
+    { id: 'drive_motor', p: [x1 + 100, cy - 62, BENCH.gz], text: 'GEAR MOTOR' },
+  ] : [
     { id: 'tail_pulley', p: [x0 + 2, cy + r + 6, -(M.hw + 46)], text: 'TAIL' },
     { id: 'drive_pulley', p: [x1 + 26, cy - r - 2, -(M.hw + 34)], text: 'HEAD / DRIVE' },
     { id: 'drive_motor', p: [x1, cy - 30, MOTOR_Z + 30], text: 'MOTOR' },
@@ -617,10 +904,11 @@ function buildLabels(cv, jointBands, q) {
     { id: 'takeup', p: [x0 - 58, cy - 54, 0], text: 'TAKE-UP' },
   ];
   for (const a of anchors) {
+    if (focusComp && a.id !== focusComp) continue;
     const s = compIndex[a.id]?.state ?? 'unmonitored';
     const p = Scene3D.project(a.p, cam);
     out.push(`<text class="sch-label" x="${p[0].toFixed(1)}" y="${(p[1] + 13).toFixed(1)}"
-      text-anchor="middle" fill="${VAGUE.has(s) ? '#6b6459' : compColor(s)}" pointer-events="none">${a.text}</text>`);
+      text-anchor="middle" fill="${VAGUE.has(s) ? '#8a9ca8' : compColor(s)}" pointer-events="none">${a.text}</text>`);
   }
 
   // Sensor nodes: a marker in 3D at the place it is mounted, with its label.
@@ -631,19 +919,20 @@ function buildLabels(cv, jointBands, q) {
     // would imply a CT is fitted when none is.
     { p: [x1, cy + 52, MOTOR_Z], label: 'CT', chans: ['motor_current_rms'],
       show: ['motor_current_rms'] },
-    { p: [x1, cy + 58, M.face / 2 + 16], label: 'VIB-DRIVE', chans: ['vibration_rms'],
+    { p: bench ? [x1 - 14, cy + 52, BENCH.sideZ + 10] : [x1, cy + 58, M.face / 2 + 16], label: 'VIB-DRIVE', chans: ['vibration_rms'],
       show: ['vibration_rms', 'vibration_crest'] },
     { p: [40, cy + r + 74, 0], label: 'CAM', chans: ['belt_offset_left', 'belt_offset_right'],
       show: ['belt_offset_left', 'belt_offset_right'] },
-    { p: [x0 + 118, cy - r - 40, -(M.rail + 8)], label: 'HALL SPEED', chans: ['hall_rpm', 'motor_rpm', 'belt_speed'],
+    { p: bench ? [x0 + 96, cy + r + 44, -(BENCH.sideZ + 8)] : [x0 + 118, cy - r - 40, -(M.rail + 8)], label: 'HALL SPEED', chans: ['hall_rpm', 'motor_rpm', 'belt_speed'],
       show: ['hall_rpm', 'belt_speed'] },
-    { p: [IR_X, cy - r - 34, hw + 26], label: 'IR TEMP', chans: ['temperature'],
+    { p: bench ? [BENCH.irX, cy + r + 52, hw + 12] : [IR_X, cy - r - 34, hw + 26], label: 'IR TEMP', chans: ['temperature'],
       show: ['temperature', 'temperature_delta'] },
     {
       p: [x0 + 26, cy + r + 56, -(hw + 14)], label: 'MARKER L/R',
       // No telemetry channel of its own: the marker sensors announce
       // themselves by producing joint passes, so that is what is reported.
-      live: (cv.joints ?? []).some((j) => Number.isFinite(j.last_ts)),
+      live: gatewayLive() && (cv.joints ?? []).some((j) => Number.isFinite(j.last_ts)
+        && snap.server.now + Date.now() - snapshotReceivedAt - j.last_ts < 3000),
       seen: (cv.joints ?? []).length > 0,
       // Laps are the marker's measurement, so that is its readout.
       readout: () => {
@@ -653,9 +942,14 @@ function buildLabels(cv, jointBands, q) {
     },
   ];
   for (const s of sensors) {
+    if (focusComp && !(s.chans ?? []).some(key => compIndex[focusComp]?.watch?.includes(key))) continue;
     const states = (s.chans ?? []).map((c) => cv.channels[c]?.state ?? 'never');
     const on = s.live ?? states.some((x) => x === 'live');
     const seen = s.seen ?? states.some((x) => x !== 'never');
+    // A marker for a sensor that has never reported (CT, camera, joint marker
+    // on this rig) reads as a claim that it is fitted. Show it only while that
+    // part is being inspected, where it doubles as "what to install".
+    if (!seen && !focusComp) continue;
     const col = on ? '#6f9e46' : seen ? '#d08a22' : '#3a3830';
     const p = Scene3D.project(s.p, cam);
     // Leader line back to the machine surface it is mounted on.
@@ -664,7 +958,7 @@ function buildLabels(cv, jointBands, q) {
       stroke="${col}" stroke-width="1" stroke-dasharray="3 3" opacity="0.65" pointer-events="none"/>`);
     out.push(`<circle cx="${p[0].toFixed(1)}" cy="${p[1].toFixed(1)}" r="4" fill="${col}" opacity="${on ? 0.95 : 0.5}" pointer-events="none"/>`);
     out.push(`<text class="sch-label" x="${p[0].toFixed(1)}" y="${(p[1] - 9).toFixed(1)}" text-anchor="middle"
-      fill="${on ? '#9a9182' : '#5c564d'}" pointer-events="none">${s.label}</text>`);
+      fill="${on ? '#a2b2bd' : '#8a9ca8'}" pointer-events="none">${s.label}</text>`);
 
     // The reading itself, stacked under the marker. Same rule as everywhere
     // else in this dashboard: a channel nobody has published reads NO SIGNAL,
@@ -673,7 +967,7 @@ function buildLabels(cv, jointBands, q) {
     if (lines) {
       lines.forEach((line, i) => {
         out.push(`<text class="sch-readout" x="${p[0].toFixed(1)}" y="${(p[1] + 15 + i * 10).toFixed(1)}"
-          text-anchor="middle" fill="${on ? '#cdbf9a' : '#6b6459'}" pointer-events="none">${esc(line)}</text>`);
+          text-anchor="middle" fill="${on ? '#c6e1df' : '#8a9ca8'}" pointer-events="none">${esc(line)}</text>`);
       });
     }
     // No NO SIGNAL text here on purpose. The marker dot is already grey for a
@@ -683,33 +977,36 @@ function buildLabels(cv, jointBands, q) {
   }
 
   for (const b of jointBands) {
+    if (focusComp && b.cid !== focusComp) continue;
     const p = Scene3D.project([b.x, b.y + 30, 0], cam);
     const col = COMP_COLOR[b.state] ?? RISK_COLOR[b.state] ?? RISK_COLOR.unknown;
     out.push(`<text class="sch-label" x="${p[0].toFixed(1)}" y="${p[1].toFixed(1)}" text-anchor="middle"
       fill="${col}" pointer-events="none">${esc(b.id)}</text>`);
   }
 
-  if (!jointBands.length) {
-    out.push(`<text class="sch-label" x="436" y="414" text-anchor="middle" fill="#4a4640"
+  if (!jointBands.length && !focusComp) {
+    out.push(`<text class="sch-label" x="436" y="414" text-anchor="middle" fill="#97a9b6"
       pointer-events="none">NO JOINT MARKER DETECTED YET</text>`);
   }
 
   // Keyboard focus proxies: one invisible box per part, so the scene is
   // reachable without a mouse. Skipped mid-gesture - nothing can be focused
   // while the pointer is dragging, and they are the most expensive labels.
+  const annotations = $('modelLabels').getAttribute('aria-pressed') === 'true' ? out.join('') : '';
+  out.length = 0;
   if (q.detail) {
     for (const c of Object.values(compIndex)) {
-      const anchor = PART_ANCHOR[c.id];
-      if (!anchor) continue;
-      const bb = Scene3D.bounds(anchor(), cam);
+      const points = partPoints[c.id] ?? PART_ANCHOR[c.id]?.();
+      if (!points) continue;
+      const bb = Scene3D.bounds(points, cam);
       out.push(`<rect class="sch-focus" x="${(bb.x - 4).toFixed(1)}" y="${(bb.y - 4).toFixed(1)}"
         width="${(bb.w + 8).toFixed(1)}" height="${(bb.h + 8).toFixed(1)}" fill="none" stroke="none"
-        tabindex="0" role="button" data-comp="${esc(c.id)}"
+        pointer-events="none" tabindex="0" role="button" data-comp="${esc(c.id)}"
         aria-label="${esc(c.label)}: ${COMP_WORD[c.state] ?? c.state}"/>`);
     }
   }
 
-  return out.join('');
+  return annotations + out.join('');
 }
 
 /**
@@ -738,31 +1035,43 @@ const PART_ANCHOR = {
   pull_cord: () => [[M.x0, M.cy + M.r + 5, M.rail + 10], [M.x1, M.cy + M.r + 28, M.rail + 22]],
 };
 
-/** Hover, focus and click, by delegation - faces are individual polygons. */
+function componentAt(event) {
+  if (event.target?.dataset?.comp) return event.target.dataset.comp;
+  const svg = $('schematic');
+  const matrix = svg.getScreenCTM();
+  if (!matrix) return null;
+  const point = new DOMPoint(event.clientX, event.clientY).matrixTransform(matrix.inverse());
+  return Scene3D.pick(preparedFaces, point.x, point.y, focusComp);
+}
+
+/** Pointer picking and accessible keyboard component selection. */
 function wireHits(svg) {
   svg.onpointermove = (e) => {
-    const id = e.target?.dataset?.comp;
-    if (id && compIndex[id]) showCompTip(id, e);
+    if (svg.classList.contains('dragging')) return;
+    const id = componentAt(e);
+    svg.classList.toggle('over-component', !!id);
+    if (id && compIndex[id] && !focusComp && !svg.classList.contains('dragging')) showCompTip(id, e);
     else if (!svg.classList.contains('dragging')) hideCompTip();
     if (tipVisible()) moveCompTip(e);
   };
   svg.onpointerleave = hideCompTip;
   svg.onclick = (e) => {
     if (svg.dataset.dragged) { svg.dataset.dragged = ''; return; }
-    const id = e.target?.dataset?.comp;
-    if (id?.startsWith('joint:')) openDrawer(id.slice(6));
+    const id = componentAt(e);
+    if (id && compIndex[id]) selectComponent(id);
   };
   for (const f of svg.querySelectorAll('.sch-focus')) {
     f.onfocus = (e) => {
+      if (focusComp) return;
       const bb = e.target.getBoundingClientRect();
       showCompTip(e.target.dataset.comp, { clientX: bb.left + bb.width / 2, clientY: bb.top + bb.height / 2 });
     };
     f.onblur = hideCompTip;
     f.onkeydown = (e) => {
       const id = e.target.dataset.comp;
-      if ((e.key === 'Enter' || e.key === ' ') && id?.startsWith('joint:')) {
+      if ((e.key === 'Enter' || e.key === ' ') && id && compIndex[id]) {
         e.preventDefault();
-        openDrawer(id.slice(6));
+        selectComponent(id);
       }
     };
   }
@@ -790,7 +1099,7 @@ function renderSchematicSummary(cv) {
 
 // ------------------------------------------------------------ part roster
 //
-// The list beside the model. It exists because a 3D picture answers "where"
+// The roster below the model. It exists because a 3D picture answers "where"
 // well and "how many" badly: an operator planning a shutdown needs to read
 // every part and its headroom in one column, without orbiting to find the
 // ones that are hiding behind the belt.
@@ -812,11 +1121,14 @@ function renderComponents(cv) {
   const fixed = (cv.components ?? []).filter((c) => !c.joint);
 
   const groups = new Map();
-  for (const c of fixed) {
+  const filtered = filterComponents(fixed, $('componentSearch').value, $('componentFilter').value);
+  $('componentResults').textContent = `${filtered.length} of ${fixed.length} components`;
+  for (const c of filtered) {
     if (!groups.has(c.group)) groups.set(c.group, []);
     groups.get(c.group).push(c);
   }
 
+  const focusedId = el.contains(document.activeElement) ? document.activeElement.dataset.comp : null;
   el.innerHTML = [...groups].map(([g, rows]) => `
     <div class="pc-group">
       <div class="pc-group-title">${esc(GROUP_LABEL[g] ?? g)}</div>
@@ -825,7 +1137,7 @@ function renderComponents(cv) {
         const note = c.state === 'unmonitored'
           ? (c.sensorHint ? `no sensor \u2014 ${c.sensorHint}` : 'no sensor on this part')
           : Number.isFinite(c.worstRatio)
-            ? `${(c.worstRatio * 100).toFixed(0)}% of limit \u00b7 ${c.causes[0]?.rule ?? c.rulesEvaluated[0] ?? ''}`
+            ? `${(c.worstRatio * 100).toFixed(0)}% of limit \u00b7 ${ruleTitle(c.causes[0]?.rule ?? c.rulesEvaluated[0])}`
             : c.state === 'no_rule' ? 'signal arriving, no rule evaluates it'
               : c.state === 'blind' ? 'its sensor stopped reporting' : '';
         return `<button class="pc-row${focusComp === c.id ? ' on' : ''}" data-comp="${esc(c.id)}"
@@ -833,21 +1145,21 @@ function renderComponents(cv) {
           <span class="pc-dot" style="background:${col}"></span>
           <span class="pc-name">${esc(c.label)}</span>
           ${wearBar(c.worstRatio)}
-          <span class="pc-state" style="color:${col}">${COMP_WORD[c.state] ?? c.state}</span>
+          <span class="pc-state" style="color:${VAGUE.has(c.state) ? RISK_COLOR.unknown : col}">${COMP_WORD[c.state] ?? c.state}</span>
           <span class="pc-note">${esc(note)}</span>
         </button>`;
       }).join('')}
-    </div>`).join('');
+    </div>`).join('') || '<div class="empty-note">No components match. Try another name or filter.</div>';
 
   for (const b of el.querySelectorAll('.pc-row')) {
     b.onclick = () => {
-      // Second click clears it, so the highlight is never sticky.
-      focusComp = focusComp === b.dataset.comp ? null : b.dataset.comp;
-      renderComponents(cv);
-      requestDraw(false);
+      selectComponent(b.dataset.comp);
+      $('machine').scrollIntoView({ block: 'start' });
     };
   }
 
+  if (focusedId) [...el.querySelectorAll('.pc-row')].find(b => b.dataset.comp === focusedId)?.focus({ preventScroll: true });
+  renderComponentDetail(cv);
   const un = fixed.filter((c) => c.state === 'unmonitored').length;
   $('componentSrc').textContent = `${fixed.length - un}/${fixed.length} instrumented`;
 }
@@ -866,15 +1178,7 @@ function bar(ratio) {
   return `<div class="tip-bar"><i style="width:${width.toFixed(1)}%;background:${col}"></i></div>`;
 }
 
-let tipFor = null;
-
-function showCompTip(id, ev) {
-  const c = compIndex[id];
-  const el = $('compTip');
-  if (!c || !el) return;
-
-  if (tipFor !== id) {
-    tipFor = id;
+function componentHealthHTML(c, full = false) {
     const col = COMP_COLOR[c.state] ?? RISK_COLOR[c.state] ?? COMP_COLOR.unmonitored;
     const rows = [`<div class="tip-head">
         <span class="tip-name">${esc(c.label)}</span>
@@ -893,27 +1197,106 @@ function showCompTip(id, ev) {
         : 'No rule for this component could be evaluated yet.'}</div>`);
       if (Number.isFinite(c.worstRatio)) rows.push(bar(c.worstRatio));
     } else {
-      for (const cause of c.causes.slice(0, 3)) {
+      for (const cause of c.causes.slice(0, full ? undefined : 3)) {
         rows.push(`<div class="tip-cause">
-          <div class="tip-rule">${esc(cause.rule)}<span>${Number.isFinite(cause.ratio) ? `${(cause.ratio * 100).toFixed(0)}% of limit` : ''}</span></div>
+          <div class="tip-rule">${esc(ruleTitle(cause.rule))}<span>${Number.isFinite(cause.ratio) ? `${(cause.ratio * 100).toFixed(0)}% of limit` : ''}</span></div>
           <div class="tip-msg">${esc(cause.message)}</div>
           ${bar(cause.ratio)}
         </div>`);
       }
     }
 
-    if (c.watching?.length) rows.push(`<div class="tip-src">measured from ${c.watching.map(esc).join(', ')}</div>`);
+    if (c.watching?.length) {
+      const labels = c.watching.map((k) => esc(lastCv?.channels?.[k]?.label ?? k));
+      rows.push(`<div class="tip-src">measured from ${labels.join(', ')}</div>`);
+    }
     if (c.coverage) rows.push(`<div class="tip-cov">${esc(c.coverage)}</div>`);
     // What it would take to see this part. An unmonitored component is not a
     // dead end, it is a line item - and this is the one an E&M department can
     // put a price against.
     if (c.sensorHint) rows.push(`<div class="tip-hint">To monitor it: ${esc(c.sensorHint)}</div>`);
-    if (c.joint) rows.push(`<div class="tip-cov">Click to open this joint's record.</div>`);
-    el.innerHTML = rows.join('');
-  }
 
+  return rows.join('');
+}
+
+function showCompTip(id, ev) {
+  const c = compIndex[id];
+  const el = $('compTip');
+  if (!c || !el) return;
+  el.innerHTML = componentHealthHTML(c);
   el.classList.add('on');
   moveCompTip(ev);
+}
+
+function renderComponentDetail(cv) {
+  const component = compIndex[focusComp];
+  const c = component && !gatewayLive() && component.everSeen?.length
+    ? { ...component, state: 'blind', causes: [], worstRatio: null } : component;
+  const panel = $('componentDetail');
+  panel.hidden = !c;
+  $('machine').classList.toggle('inspecting', !!c);
+  $('modelMode').textContent = c ? 'COMPONENT INSPECTION / surrounding structure dimmed' : 'INTERACTIVE ASSET VIEW';
+  if (!c) return;
+  $('componentTitle').textContent = c.label;
+  const color = VAGUE.has(c.state) ? RISK_COLOR.unknown : compColor(c.state);
+  const linked = (c.watch ?? c.watching ?? []).map(key => [key, cv.channels[key]]);
+  const readings = linked.map(([key, channel]) => {
+    const live = channel?.state === 'live' && gatewayLive();
+    const value = live ? num(channel.value, decimals(channel.unit)) : null;
+    return `<div><dt>${esc(channel?.label ?? key)}</dt><dd>${value === null ? 'NO SIGNAL' : `${value} ${esc(channel.unit)}`}<small>${live ? 'LIVE' : 'UNAVAILABLE'} &middot; ${ago(channel?.ts)}</small></dd></div>`;
+  }).join('');
+  $('componentDetailBody').innerHTML = `<div class="component-health"><strong class="component-status" style="color:${color}">${esc(COMP_WORD[c.state] ?? c.state)}</strong>${componentHealthHTML(c, true)}<div class="tip-cov">${c.rulesEvaluated.length} rules evaluated &middot; ${c.alarmCount ?? 0} open alarms</div></div>
+    <div>${c.joint ? `<p class="component-message">${c.passes ?? 0} recorded passes &middot; Last seen ${ago(cv.joints.find(j => `joint:${j.id}` === c.id)?.last_ts)}</p>` : ''}${readings ? `<dl class="component-readings">${readings}</dl>` : '<p class="component-message">No live sensor channels are assigned to this component.</p>'}
+    ${c.joint ? '<button class="ghost-btn" id="componentJointRecord">Open joint history</button>' : ''}</div>`;
+  if (c.joint) $('componentJointRecord').onclick = () => openDrawer(c.id.slice(6));
+}
+
+function moveCamera(target) {
+  cancelAnimationFrame(cameraAnimation);
+  const start = { ...cam };
+  const started = performance.now();
+  const duration = matchMedia('(prefers-reduced-motion: reduce)').matches ? 0 : 360;
+  const frame = now => {
+    const t = duration ? Math.min(1, (now - started) / duration) : 1;
+    const eased = 1 - (1 - t) ** 3;
+    for (const key of Object.keys(target)) cam[key] = start[key] + (target[key] - start[key]) * eased;
+    requestDraw(false);
+    cameraAnimation = t < 1 ? requestAnimationFrame(frame) : 0;
+  };
+  cameraAnimation = requestAnimationFrame(frame);
+}
+
+function selectComponent(id) {
+  if (!compIndex[id]) return;
+  // Re-selecting the inspected part toggles back to the full conveyor,
+  // using the same camera and control reset as the Reset button.
+  if (focusComp === id) {
+    $('viewReset').click();
+    return;
+  }
+  focusComp = id;
+  hideCompTip();
+  const points = partPoints[id] ?? PART_ANCHOR[id]?.();
+  if (points?.length) {
+    const min = [0, 1, 2].map(i => Math.min(...points.map(p => p[i])));
+    const max = [0, 1, 2].map(i => Math.max(...points.map(p => p[i])));
+    const target = { ...HOME, cx: 436, cy: 210,
+      tx: (min[0] + max[0]) / 2, ty: (min[1] + max[1]) / 2, tz: (min[2] + max[2]) / 2 };
+    const bounds = Scene3D.bounds(points, target);
+    target.focal *= Math.min(4.5, 570 / Math.max(bounds.w, 1), 255 / Math.max(bounds.h, 1));
+    moveCamera(target);
+  }
+  for (const button of document.querySelectorAll('[data-view]')) button.setAttribute('aria-pressed', 'false');
+  renderComponents(lastCv);
+  requestDraw(false);
+}
+
+function resetComponent(view = HOME) {
+  focusComp = null;
+  hideCompTip();
+  moveCamera({ ...HOME, ...view });
+  if (lastCv) renderComponents(lastCv);
+  requestDraw(false);
 }
 
 function moveCompTip(ev) {
@@ -928,7 +1311,6 @@ function moveCompTip(ev) {
 
 function hideCompTip() {
   $('compTip')?.classList.remove('on');
-  tipFor = null;
 }
 
 /**
@@ -953,14 +1335,57 @@ const VIEWS = {
 function initSchematic() {
   const svg = $('schematic');
   if (!svg) return;
-  // `fast` is true while a gesture is in flight; the settled frame is full
-  // quality. See LOD above.
-  Scene3D.orbit(svg, cam, (fast) => requestDraw(fast));
+  attachModelFullscreen($('machine'), $('modelFullscreen'), requestDraw);
+  // Keep joint records accessible in the browser's fullscreen top layer.
+  $('machine').append($('scrim'), $('drawer'));
+  $('modelLabels').onclick = () => {
+    const b = $('modelLabels');
+    b.setAttribute('aria-pressed', String(b.getAttribute('aria-pressed') !== 'true'));
+    requestDraw();
+  };
+  $('modelTextures').onclick = () => {
+    const button = $('modelTextures');
+    button.setAttribute('aria-pressed', String(button.getAttribute('aria-pressed') !== 'true'));
+    requestDraw();
+  };
+  for (const [id, factor] of [['modelZoomIn', 1.18], ['modelZoomOut', 1 / 1.18]]) {
+    $(id).onclick = () => {
+      cancelAnimationFrame(cameraAnimation);
+      cam.focal = Math.max(650, Math.min(9000, cam.focal * factor));
+      for (const button of document.querySelectorAll('[data-view]')) button.setAttribute('aria-pressed', 'false');
+      requestDraw();
+    };
+  }
+  for (const id of ['componentSearch', 'componentFilter']) {
+    $(id).addEventListener(id === 'componentSearch' ? 'input' : 'change', () => {
+      if (lastCv) renderComponents(lastCv);
+    });
+  }
+  try { viewport = new ConveyorViewport($('schematicCanvas'), () => requestDraw()); }
+  catch (error) { console.warn('Using SVG model fallback:', error); }
+  new ResizeObserver(() => requestDraw()).observe(svg);
+  svg.addEventListener('pointerdown', () => cancelAnimationFrame(cameraAnimation));
+  Scene3D.orbit(svg, cam, (fast) => {
+    cancelAnimationFrame(cameraAnimation);
+    hideCompTip();
+    for (const button of document.querySelectorAll('[data-view]')) button.setAttribute('aria-pressed', 'false');
+    requestDraw(fast);
+  });
 
-  $('viewReset').onclick = () => { Object.assign(cam, HOME); requestDraw(false); };
+  $('viewReset').onclick = () => {
+    resetComponent();
+    for (const button of document.querySelectorAll('[data-view]')) {
+      button.setAttribute('aria-pressed', button.dataset.view === 'iso');
+    }
+    requestDraw(false);
+  };
+  $('componentClose').onclick = () => { $('viewReset').click(); $('schematic').focus({ preventScroll: true }); };
+  svg.addEventListener('keydown', e => {
+    if (e.key === 'Escape') { $('viewReset').click(); svg.focus({ preventScroll: true }); }
+  });
   for (const b of document.querySelectorAll('[data-view]')) {
     b.onclick = () => {
-      Object.assign(cam, VIEWS[b.dataset.view] ?? HOME);
+      resetComponent(VIEWS[b.dataset.view] ?? HOME);
       for (const o of document.querySelectorAll('[data-view]')) o.setAttribute('aria-pressed', o === b);
       requestDraw(false);
     };
@@ -969,9 +1394,22 @@ function initSchematic() {
 
 // ---------------------------------------------------------------- channels
 
+// Channels no node has ever published are folded into one line: eight
+// "NO SIGNAL" rows read as a broken system, when they are sensors this
+// conveyor simply does not have. They stay listed, never hidden outright.
+let uninstalledOpen = false;
+$('channelGroups').addEventListener('toggle', (e) => {
+  if (e.target.classList?.contains('chan-uninstalled')) uninstalledOpen = e.target.open;
+}, true);
+
 function renderChannels(cv) {
+  const showEngineering = $('engToggle').getAttribute('aria-pressed') === 'true';
+  const hallWaiting = gatewayLive() && cv.hallDiagnostics && Date.now() - cv.hallDiagnostics.ts < 5000;
   const groups = {};
+  const uninstalled = [];
   for (const [key, c] of Object.entries(cv.channels)) {
+    if (c.state === 'never' && !(key === 'hall_rpm' && hallWaiting)) { uninstalled.push(c.label); continue; }
+    if (!showEngineering && ENGINEERING_CHANNELS.has(key)) continue;
     (groups[c.group] ??= []).push([key, c]);
   }
   const html = Object.entries(groups).map(([g, rows]) => `
@@ -980,7 +1418,7 @@ function renderChannels(cv) {
       ${rows.map(([key, c]) => {
         const has = c.value !== null && c.value !== undefined;
         const hall = key === 'hall_rpm' ? cv.hallDiagnostics : null;
-        const hallFresh = hall && Date.now() - hall.ts < 5000;
+        const hallFresh = gatewayLive() && hall && Date.now() - hall.ts < 5000;
         const waiting = hallFresh && !has;
         const hallNote = hallFresh
           ? `${hall.pulses ?? 0} magnet passes${hall.period_ms > 0 ? ` · loop ${(hall.period_ms / 1000).toFixed(2)} s` : ' · waiting for two passes to measure RPM'}`
@@ -994,7 +1432,10 @@ function renderChannels(cv) {
         </div>`;
       }).join('')}
     </div>`).join('');
-  $('channelGroups').innerHTML = html;
+  $('channelGroups').innerHTML = html + (uninstalled.length
+    ? `<details class="chan-uninstalled"${uninstalledOpen ? ' open' : ''}><summary>Not installed on this conveyor (${uninstalled.length})</summary>
+        <ul>${uninstalled.map((label) => `<li>${esc(label)}</li>`).join('')}</ul></details>`
+    : '');
 
   const liveCount = Object.values(cv.channels).filter((c) => c.state === 'live').length;
   const total = Object.keys(cv.channels).length;
@@ -1017,20 +1458,63 @@ function renderTrendOptions(cv) {
   loadTrend();
 }
 
+let trendRequest = 0;
+let trendData = null;
+let trendAbort = null;
 async function loadTrend() {
   const cv = currentConveyor();
   if (!cv) return;
   const channel = $('trendChannel').value;
   const minutes = $('trendWindow').value;
-  try {
-    const res = await fetch(`/api/history?conveyor=${encodeURIComponent(cv.id)}&channel=${channel}&minutes=${minutes}`);
-    const data = await res.json();
-    drawSeries($('trendChart'), data.points ?? [], data.unit ?? '');
-    $('trendEmpty').classList.toggle('hidden', (data.points ?? []).length > 0);
-  } catch {
+  const request = ++trendRequest;
+  trendAbort?.abort();
+  trendAbort = new AbortController();
+  const key = `${cv.id}/${channel}/${minutes}`;
+  if (trendData?.key !== key) {
+    trendData = null;
+    drawSeries($('trendChart'), [], '');
+    $('exportTrend').disabled = true;
+    $('trendEmpty').textContent = 'Loading signal history...';
     $('trendEmpty').classList.remove('hidden');
   }
+  try {
+    const res = await fetch(`/api/history?conveyor=${encodeURIComponent(cv.id)}&channel=${encodeURIComponent(channel)}&minutes=${encodeURIComponent(minutes)}`, { signal: trendAbort.signal });
+    if (!res.ok) throw new Error(`History unavailable (${res.status})`);
+    const data = await res.json();
+    if (request !== trendRequest) return;
+    const points = (data.points ?? []).filter(p => Number.isFinite(p.ts) && Number.isFinite(p.v));
+    trendData = { key, conveyor: cv.id, channel, unit: data.unit ?? '', points };
+    drawSeries($('trendChart'), points, trendData.unit);
+    $('trendEmpty').textContent = 'No stored samples in this window';
+    $('trendEmpty').classList.toggle('hidden', points.length > 0);
+    $('exportTrend').disabled = !points.length;
+    const values = points.map(p => p.v);
+    const range = values.length ? values.reduce((r, v) => [Math.min(r[0], v), Math.max(r[1], v)], [Infinity, -Infinity]) : null;
+    $('trendSummary').textContent = range
+      ? `${points.length.toLocaleString()} samples / Min ${num(range[0])} / Max ${num(range[1])} / Latest ${num(points.at(-1).v)} ${trendData.unit}`
+      : 'No measurements recorded for this signal and time window.';
+  } catch (error) {
+    if (request !== trendRequest || error.name === 'AbortError') return;
+    trendData = null;
+    drawSeries($('trendChart'), [], '');
+    $('exportTrend').disabled = true;
+    $('trendEmpty').textContent = 'History unavailable. Retrying automatically...';
+    $('trendEmpty').classList.remove('hidden');
+    $('trendSummary').textContent = 'Could not retrieve measurements from the gateway.';
+  }
 }
+$('exportTrend').onclick = () => {
+  if (!trendData?.points.length) return;
+  const url = URL.createObjectURL(new Blob(['\ufeff', historyCSV(trendData)], { type: 'text/csv;charset=utf-8' }));
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `pravaah-${trendData.conveyor}-${trendData.channel}-${new Date().toISOString().slice(0, 10)}.csv`.replace(/[^a-zA-Z0-9._-]/g, '_');
+  document.body.append(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+};
+new ResizeObserver(() => {
+  if (trendData) drawSeries($('trendChart'), trendData.points, trendData.unit);
+}).observe($('trendChart'));
 setInterval(loadTrend, 5000);
 
 /** Line chart on a canvas. No library, no smoothing, no interpolation of gaps. */
@@ -1045,10 +1529,9 @@ function drawSeries(canvas, points, unit, color = LAMP) {
 
   const padL = 52, padR = 10, padT = 10, padB = 22;
   const xs = points.map((p) => p.ts), ys = points.map((p) => p.v);
-  let lo = Math.min(...ys), hi = Math.max(...ys);
-  if (hi - lo < 1e-9) { hi = lo + 1; lo -= 1; }
-  const pad = (hi - lo) * 0.12; lo -= pad; hi += pad;
-  const t0 = Math.min(...xs), t1 = Math.max(...xs);
+  // Minimum span relative to the signal, so a steady belt reads as steady.
+  const [lo, hi] = axisRange(ys);
+  const t0 = xs.reduce((a, b) => Math.min(a, b), Infinity), t1 = xs.reduce((a, b) => Math.max(a, b), -Infinity);
   const X = (t) => padL + ((t - t0) / Math.max(t1 - t0, 1)) * (w - padL - padR);
   const Y = (v) => padT + (1 - (v - lo) / (hi - lo)) * (h - padT - padB);
 
@@ -1057,15 +1540,15 @@ function drawSeries(canvas, points, unit, color = LAMP) {
   for (let i = 0; i <= 4; i++) {
     const v = lo + ((hi - lo) / 4) * i;
     const y = Y(v);
-    g.strokeStyle = '#191c21'; g.lineWidth = 1;
+    g.strokeStyle = '#263740'; g.lineWidth = 1;
     g.beginPath(); g.moveTo(padL, y + 0.5); g.lineTo(w - padR, y + 0.5); g.stroke();
-    g.fillStyle = '#5c564d'; g.textAlign = 'right';
-    g.fillText(v.toFixed(Math.abs(hi - lo) < 5 ? 2 : 1), padL - 7, y);
+    g.fillStyle = '#94aab9'; g.textAlign = 'right';
+    g.fillText(v.toFixed(Math.abs(hi - lo) < 0.5 ? 3 : Math.abs(hi - lo) < 5 ? 2 : 1), padL - 7, y);
   }
-  g.fillStyle = '#5c564d'; g.textAlign = 'left';
-  g.fillText(new Date(t0).toLocaleTimeString(), padL, h - 9);
+  g.fillStyle = '#94aab9'; g.textAlign = 'left';
+  g.fillText(plantTime(t0), padL, h - 9);
   g.textAlign = 'right';
-  g.fillText(new Date(t1).toLocaleTimeString(), w - padR, h - 9);
+  g.fillText(plantTime(t1), w - padR, h - 9);
   if (unit) { g.textAlign = 'left'; g.fillText(unit, 6, padT + 4); }
 
   const grad = g.createLinearGradient(0, padT, 0, h - padB);
@@ -1104,7 +1587,7 @@ function renderJoints(cv) {
     const cell = (v, d, suffix = '') =>
       v === null ? '<span class="muted">&mdash;</span>' : `${num(v, d)}${suffix}`;
     return `<tr data-joint="${esc(j.id)}">
-      <td>${esc(j.label ?? j.id)}</td>
+      <td><button class="joint-link" aria-label="Inspect joint ${esc(j.label ?? j.id)}">${esc(j.label ?? j.id)}</button></td>
       <td><span class="pill" data-risk="${j.risk ?? 'unknown'}">${(j.risk ?? 'unknown').replace(/_/g, ' ')}</span></td>
       <td class="num">${j.passes ?? 0}</td>
       <td class="num">${j.baselineReady ? `${blN} laps` : `<span class="muted">${blN}/${cv.baselineLaps}</span>`}</td>
@@ -1123,49 +1606,185 @@ function renderJoints(cv) {
 
 // ----------------------------------------------------------------- alarms
 
+const OUTCOME = {
+  inspected_no_fault: 'inspected, no fault found', adjusted: 'adjusted', repaired: 'repaired',
+  replaced: 'part replaced', false_alarm: 'false alarm (sensor or setting issue)',
+  inspected: 'inspected', no_action: 'no action',
+};
+
 function renderAlarms(cv) {
+  alertOnChange(cv.alarms);
   const el = $('alarmList');
   if (!cv.alarms.length) {
     el.innerHTML = `<div class="empty-note">NO OPEN ALARMS</div>`;
     return;
   }
+  const parts = Object.fromEntries((cv.components ?? []).map((c) => [c.id, c.label]));
   el.innerHTML = cv.alarms.map((a) => {
-    let ev = null;
-    try { ev = a.evidence ? JSON.parse(a.evidence) : null; } catch { /* keep null */ }
-    const measured = ev?.measured
-      ? Object.entries(ev.measured).map(([k, v]) =>
-          `${k}=${typeof v === 'number' ? v.toFixed(3) : v}`).join('  ')
+    const ev = parseEvidence(a);
+    const part = parts[ev?.component] ?? (a.joint_id ? `joint ${a.joint_id}` : 'the conveyor');
+    const action = RULE_TEXT[ev?.rule]?.action;
+    const readings = ev?.measured
+      ? Object.entries(ev.measured).filter(([, v]) => typeof v === 'number')
+        .map(([k, v]) => `${cv.channels[k]?.label ?? k.replace(/_/g, ' ')} ${num(v, 3)}`).join(' · ')
       : '';
     return `<div class="alarm">
       <div class="alarm-bar" style="background:${RISK_COLOR[a.level] ?? RISK_COLOR.unknown}"></div>
       <div class="alarm-main">
-        <div class="alarm-msg">${esc(a.message)}</div>
-        <div class="alarm-meta">${esc(a.joint_id ?? 'conveyor')} · ${esc(a.family ?? '')} · ${esc(ev?.rule ?? '')} · ${ago(a.ts)}${a.ack_ts ? ` · ack ${esc(a.ack_by ?? '')}` : ''}</div>
-        ${measured ? `<div class="alarm-meta">${esc(measured)}</div>` : ''}
+        <div class="alarm-msg">${esc(RISK_WORD[a.level] ?? a.level)}: ${esc(ruleTitle(ev?.rule))} at ${esc(part)}</div>
+        <div class="alarm-meta">${esc(a.message)}</div>
+        ${action ? `<div class="alarm-action"><b>Suggested check:</b> ${esc(action)}</div>` : ''}
+        <div class="alarm-meta">Opened ${esc(plantDayTime(a.ts))} (${ago(a.ts)})${a.ack_ts ? ` · acknowledged by ${esc(a.ack_by ?? 'unknown')}` : ''}</div>
+        ${readings ? `<div class="alarm-meta alarm-peak">Worst reading: ${esc(readings)}</div>` : ''}
       </div>
       <div class="alarm-actions">
-        <button class="ghost-btn" data-ack="${a.id}"${a.ack_ts ? ' disabled' : ''}>${a.ack_ts ? 'ACKED' : 'ACK'}</button>
-        <button class="ghost-btn" data-close="${a.id}">CLOSE</button>
+        <button class="ghost-btn" data-ack="${a.id}"${a.ack_ts ? ' disabled' : ''}>${a.ack_ts ? 'Acknowledged' : 'Acknowledge'}</button>
+        <button class="ghost-btn" data-close="${a.id}">Close</button>
       </div>
     </div>`;
   }).join('');
 
-  for (const b of el.querySelectorAll('[data-ack]')) {
-    b.onclick = () => fetch(`/api/alarms/${b.dataset.ack}/ack`, {
-      method: 'POST', headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ by: 'operator' }),
+  const find = (id) => cv.alarms.find((x) => String(x.id) === id);
+  for (const b of el.querySelectorAll('[data-ack]')) b.onclick = () => openAlarmDialog('ack', find(b.dataset.ack));
+  for (const b of el.querySelectorAll('[data-close]')) b.onclick = () => openAlarmDialog('close', find(b.dataset.close));
+}
+
+// ---- acknowledge / close: always a named person, never a browser prompt()
+
+let dialogTarget = null;
+function openAlarmDialog(mode, alarm) {
+  if (!alarm) return;
+  dialogTarget = { mode, id: alarm.id };
+  const ev = parseEvidence(alarm);
+  $('alarmDialogTitle').textContent = mode === 'ack' ? 'Acknowledge alarm' : 'Close alarm';
+  $('alarmDialogSub').textContent = `${ruleTitle(ev?.rule)}: ${alarm.message}`;
+  $('alarmOutcomeWrap').hidden = mode === 'ack';
+  $('alarmNotesWrap').hidden = mode === 'ack';
+  $('alarmSubmit').textContent = mode === 'ack' ? 'Acknowledge' : 'Close alarm';
+  $('alarmWho').value = storage.get('pravaah.operator') ?? '';
+  $('alarmNotes').value = '';
+  $('alarmDialog').showModal();
+  ($('alarmWho').value ? $('alarmSubmit') : $('alarmWho')).focus();
+}
+$('alarmCancel').onclick = () => $('alarmDialog').close();
+$('alarmForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const who = $('alarmWho').value.trim();
+  if (!who || !dialogTarget) return;
+  storage.set('pravaah.operator', who);
+  const { mode, id } = dialogTarget;
+  const body = mode === 'ack' ? { by: who }
+    : { outcome: $('alarmOutcome').value, technician: who, notes: $('alarmNotes').value.trim() || null };
+  $('alarmSubmit').disabled = true;
+  try {
+    const res = await fetch(`/api/alarms/${id}/${mode}`, {
+      method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body),
     });
+    if (!res.ok) throw new Error(`gateway answered ${res.status}`);
+    $('alarmDialog').close();
+    if (alarmView === 'history') loadAlarmHistory();
+  } catch (err) {
+    $('alarmDialogSub').textContent = `Could not save (${err.message}). Try again.`;
+  } finally {
+    $('alarmSubmit').disabled = false;
   }
-  for (const b of el.querySelectorAll('[data-close]')) {
-    b.onclick = () => {
-      const outcome = prompt('Close alarm. What did the inspection find?\n(adjusted / inspected / repaired / replaced / no_action)');
-      if (outcome === null) return;
-      fetch(`/api/alarms/${b.dataset.close}/close`, {
-        method: 'POST', headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ outcome: outcome || 'no_action', technician: 'operator' }),
-      });
-    };
+});
+
+// ---- open / history
+
+let alarmView = 'open';
+function setAlarmView(view) {
+  alarmView = view;
+  $('alarmTabOpen').setAttribute('aria-pressed', String(view === 'open'));
+  $('alarmTabHistory').setAttribute('aria-pressed', String(view === 'history'));
+  $('alarmList').hidden = view !== 'open';
+  $('alarmHistory').hidden = view !== 'history';
+  if (view === 'history') loadAlarmHistory();
+}
+$('alarmTabOpen').onclick = () => setAlarmView('open');
+$('alarmTabHistory').onclick = () => setAlarmView('history');
+
+async function loadAlarmHistory() {
+  const cv = currentConveyor();
+  if (!cv) return;
+  const el = $('alarmHistory');
+  try {
+    const res = await fetch(`/api/alarms?conveyor=${encodeURIComponent(cv.id)}`);
+    if (!res.ok) throw new Error(String(res.status));
+    const { alarms } = await res.json();
+    el.innerHTML = alarms.length ? alarms.map((a) => {
+      const ev = parseEvidence(a);
+      const closed = a.closed_ts
+        ? `Closed ${esc(plantDayTime(a.closed_ts))} by ${esc(a.closed_by ?? 'unknown')}: ${esc(OUTCOME[a.outcome] ?? a.outcome ?? 'no finding recorded')}${a.close_notes ? ` · "${esc(a.close_notes)}"` : ''}`
+        : 'Still open';
+      return `<div class="alarm">
+        <div class="alarm-bar" style="background:${RISK_COLOR[a.level] ?? RISK_COLOR.unknown}"></div>
+        <div class="alarm-main">
+          <div class="alarm-msg">${esc(ruleTitle(ev?.rule))} · ${esc(RISK_WORD[a.level] ?? a.level)}</div>
+          <div class="alarm-meta">${esc(a.message)}</div>
+          <div class="alarm-meta">Opened ${esc(plantDayTime(a.ts))}${a.ack_ts ? ` · acknowledged ${esc(plantDayTime(a.ack_ts))} by ${esc(a.ack_by ?? 'unknown')}` : ''}</div>
+          <div class="alarm-meta${a.closed_ts ? ' hist-outcome' : ''}">${closed}</div>
+        </div>
+      </div>`;
+    }).join('') : '<div class="empty-note">NO ALARMS RECORDED YET</div>';
+  } catch {
+    el.innerHTML = '<div class="empty-note">Alarm history unavailable. Try again shortly.</div>';
   }
+}
+
+// ---- audible and visual alert when an alarm opens or escalates
+
+let audio = null;
+let soundOn = storage.get('pravaah.sound') !== 'off';
+let knownAlarms = null; // id -> "level|message"
+function syncSoundButton() {
+  $('soundToggle').setAttribute('aria-pressed', String(soundOn));
+  $('soundToggle').textContent = soundOn ? 'Sound on' : 'Sound off';
+}
+syncSoundButton();
+$('soundToggle').onclick = () => {
+  soundOn = !soundOn;
+  storage.set('pravaah.sound', soundOn ? 'on' : 'off');
+  syncSoundButton();
+  if (soundOn) chime(1);
+};
+// Browsers only allow audio after a user gesture, so unlock on the first one.
+addEventListener('pointerdown', () => {
+  try { audio ??= new AudioContext(); audio.resume(); } catch { /* no audio */ }
+}, { once: true });
+
+function chime(times = 3) {
+  if (!soundOn) return;
+  try {
+    audio ??= new AudioContext();
+    const t0 = audio.currentTime;
+    for (let i = 0; i < times; i++) {
+      const at = t0 + i * 0.35;
+      const osc = audio.createOscillator();
+      const gain = audio.createGain();
+      osc.type = 'square';
+      osc.frequency.value = i % 2 ? 660 : 880;
+      gain.gain.setValueAtTime(0.0001, at);
+      gain.gain.exponentialRampToValueAtTime(0.18, at + 0.02);
+      gain.gain.exponentialRampToValueAtTime(0.0001, at + 0.28);
+      osc.connect(gain).connect(audio.destination);
+      osc.start(at);
+      osc.stop(at + 0.3);
+    }
+  } catch { /* audio unavailable */ }
+}
+
+function alertOnChange(alarms) {
+  const current = new Map(alarms.map((a) => [a.id, `${a.level}|${a.message}`]));
+  if (knownAlarms && alarms.some((a) => !a.ack_ts && knownAlarms.get(a.id) !== current.get(a.id))) {
+    chime(3);
+    document.body.classList.remove('alarm-flash');
+    void document.body.offsetWidth; // restart the animation
+    document.body.classList.add('alarm-flash');
+    setTimeout(() => document.body.classList.remove('alarm-flash'), 6500);
+  }
+  knownAlarms = current;
+  document.title = alarms.length ? `(${alarms.length}) ALARM · PRAVAAH` : 'PRAVAAH | Conveyor intelligence';
 }
 
 // ------------------------------------------------------------------ nodes
@@ -1177,25 +1796,25 @@ function renderNodes() {
     $('nodeSrc').textContent = '0 nodes';
     return;
   }
-  el.innerHTML = snap.nodes.map((n) => {
+  const nodes = snap.nodes.map(n => gatewayLive() ? n : { ...n, state: 'offline', health: null });
+  el.innerHTML = nodes.map((n) => {
     const cls = n.state === 'live' ? 'on' : n.state === 'offline' ? 'off' : '';
     const health = n.health
       ? `<div class="node-health">${Object.entries(n.health)
-          .map(([k, s]) => `<span class="hchip" data-s="${esc(s)}">${esc(k)}</span>`).join('')}</div>`
+          .map(([k, s]) => `<span class="hchip" data-s="${esc(s)}" title="${esc(k)}: ${esc(s)}">${esc(HEALTH_NAME[k] ?? k)}</span>`).join('')}</div>`
       : '';
-    return `<div class="node">
+    return `<div class="node" title="${esc(n.firmware ? `Firmware ${n.firmware}` : '')}">
       <span class="dot ${cls}"></span>
       <div>
-        <div class="node-id">${esc(n.node)}</div>
+        <div class="node-id">${esc(nodeName(n.node))}<small class="node-sub">${esc(n.node)}</small></div>
         ${health}
       </div>
       <div class="node-meta">
-        ${n.state.toUpperCase()} · ${ago(n.ts)}<br>
-        ${n.rssi !== null && n.rssi !== undefined ? `${n.rssi} dBm · ` : ''}${esc(n.firmware ?? '')}
+        ${n.state.toUpperCase()} · ${ago(n.ts)}${n.rssi !== null && n.rssi !== undefined ? `<br>${n.rssi} dBm` : ''}
       </div>
     </div>`;
   }).join('');
-  const up = snap.nodes.filter((n) => n.state === 'live').length;
+  const up = nodes.filter((n) => n.state === 'live').length;
   $('nodeSrc').textContent = `${up}/${snap.nodes.length} live`;
 }
 
@@ -1207,13 +1826,19 @@ function renderGaps(cv) {
   for (const j of cv.joints) for (const s of j.skipped ?? []) gaps.set(`${j.id}:${s.rule}`, s.why);
 
   const el = $('gapList');
+  if (!gatewayLive()) {
+    el.innerHTML = '<div class="empty-note">Gateway unavailable. Waiting for a fresh coverage evaluation.</div>';
+    return;
+  }
   if (!gaps.size) {
     el.innerHTML = `<div class="empty-note">${cv.lastMessageTs === null ? 'NOTHING EVALUATED YET' : 'ALL RULES EVALUATING'}</div>`;
     return;
   }
-  el.innerHTML = [...gaps].map(([rule, why]) =>
-    `<div class="gap"><div class="gap-rule">${esc(rule)}</div><div class="gap-why">${esc(why)}</div></div>`
-  ).join('');
+  el.innerHTML = [...gaps].map(([key, why]) => {
+    const [joint, rule] = key.includes(':') ? key.split(':') : [null, key];
+    return `<div class="gap"><div class="gap-rule">${esc(ruleTitle(rule))}${joint ? ` · joint ${esc(joint)}` : ''}</div>
+      <div class="gap-why">${esc(RULE_TEXT[rule]?.needs ?? why)}</div></div>`;
+  }).join('');
 }
 
 // ----------------------------------------------------------------- ingest
@@ -1231,7 +1856,7 @@ function renderIngest(cv) {
   const el = $('rejectList');
   el.innerHTML = snap.rejects.length
     ? snap.rejects.map((r) =>
-        `<div class="reject"><span>${new Date(r.ts).toLocaleTimeString()} ${esc(r.topic)}</span> ${esc(r.reason)}</div>`
+        `<div class="reject"><span>${plantTime(r.ts)} ${esc(r.topic)}</span> ${esc(r.reason)}</div>`
       ).join('')
     : `<div class="reject" style="color:var(--dimmer)">none</div>`;
   $('ingestSrc').textContent = snap.mqtt.broker;
@@ -1241,22 +1866,39 @@ function renderIngest(cv) {
 
 async function openDrawer(jointId) {
   openJoint = jointId;
+  $('drawer').inert = false;
   $('drawer').setAttribute('aria-hidden', 'false');
+  $('drawerClose').focus();
   $('scrim').classList.add('on');
   await refreshDrawer(currentConveyor());
 }
 
 function closeDrawer() {
+  drawerRequest++;
+  const wasOpen = !!openJoint;
   openJoint = null;
+  $('drawer').inert = true;
+  if (wasOpen) $('schematic').focus({ preventScroll: true });
   $('drawer').setAttribute('aria-hidden', 'true');
   $('scrim').classList.remove('on');
 }
 $('drawerClose').onclick = closeDrawer;
 $('scrim').onclick = closeDrawer;
-document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeDrawer(); });
+document.addEventListener('keydown', (e) => {
+  if (!openJoint) return;
+  if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); closeDrawer(); }
+  if (e.key === 'Tab') {
+    const targets = [...$('drawer').querySelectorAll('button, a[href], input, select, [tabindex="0"]')];
+    const first = targets[0], last = targets.at(-1);
+    if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last?.focus(); }
+    else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first?.focus(); }
+  }
+});
 
 async function refreshDrawer(cv) {
   if (!openJoint || !cv) return;
+  const request = ++drawerRequest;
+  const jointId = openJoint;
   const j = cv.joints.find((x) => x.id === openJoint);
   $('drawerTitle').textContent = j?.label ?? openJoint;
   $('drawerSub').textContent = j
@@ -1268,6 +1910,7 @@ async function refreshDrawer(cv) {
     const res = await fetch(`/api/joint/${encodeURIComponent(openJoint)}?conveyor=${encodeURIComponent(cv.id)}`);
     detail = await res.json();
   } catch { /* leave empty */ }
+  if (request !== drawerRequest || openJoint !== jointId || currentConveyor()?.id !== cv.id) return;
 
   const last = j?.last ?? {};
   const bl = detail.baseline ?? {};
@@ -1362,6 +2005,33 @@ function fatal(what, err) {
 }
 addEventListener('error', (e) => fatal('page script', e.error ?? e.message));
 addEventListener('unhandledrejection', (e) => fatal('async task', e.reason));
+
+$('statusReport').onclick = () => {
+  const cv = currentConveyor();
+  if (!cv) return;
+  const html = statusReportHTML(cv, {
+    site: snap.server.siteLabel ?? snap.server.site, connected: gatewayLive(),
+    now: snap.server.now + Date.now() - snapshotReceivedAt,
+    source: cv.playback ? `Recorded playback (${cv.playback.rate}×); original recording ${new Date(cv.playback.recorded_at_ms).toISOString()}` : 'Live gateway snapshot',
+  });
+  const url = URL.createObjectURL(new Blob([html], { type: 'text/html;charset=utf-8' }));
+  if (!window.open(url, '_blank')) {
+    // Pop-up blocked: download it instead.
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `pravaah-status-${cv.id}-${new Date().toISOString().slice(0, 16).replace(/[:T]/g, '-')}.html`;
+    document.body.append(a); a.click(); a.remove();
+  }
+  setTimeout(() => URL.revokeObjectURL(url), 60000);
+};
+
+$('engToggle').setAttribute('aria-pressed', String(storage.get('pravaah.engineering') === 'on'));
+$('engToggle').onclick = () => {
+  const on = $('engToggle').getAttribute('aria-pressed') !== 'true';
+  $('engToggle').setAttribute('aria-pressed', String(on));
+  storage.set('pravaah.engineering', on ? 'on' : 'off');
+  if (snap) render();
+};
 
 setInterval(() => { $('clock').textContent = clock(); }, 1000);
 $('clock').textContent = clock();

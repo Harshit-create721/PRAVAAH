@@ -195,6 +195,29 @@ export const COMPONENTS = [
   },
 ];
 
+/**
+ * Parts that physically exist on the team's bench rig (photo in ConveryBelt/):
+ * a short flat belt on an aluminium frame, two end pulleys and a right-angle
+ * gear motor. Listing a hopper, idler sets or a pull-cord for that machine
+ * would claim equipment the demo does not have.
+ */
+export const BENCH_PARTS = new Set(['drive_pulley', 'tail_pulley', 'drive_motor', 'gearbox',
+  'drive_bearing', 'idlers', 'belt_tracking', 'belt_carcass']);
+const BENCH_OVERRIDES = {
+  gearbox: { label: 'Right-angle gearbox' },
+  idlers: {
+    label: 'IR temperature spot', group: 'belt',
+    coverage: 'The IR sensor reads ONE spot on the bench rig. Its exact target has not been surveyed yet - record it before reading this colour as a specific part.',
+  },
+};
+
+/** The component list for a conveyor's physical model ('mining' or 'bench'). */
+export function componentsFor(model) {
+  return model === 'bench'
+    ? COMPONENTS.filter((c) => BENCH_PARTS.has(c.id)).map((c) => ({ ...c, ...BENCH_OVERRIDES[c.id] }))
+    : COMPONENTS;
+}
+
 /** Roster grouping, in the order the UI lists them. */
 export const COMPONENT_GROUPS = [
   ['drive', 'Drive end'],
@@ -203,6 +226,19 @@ export const COMPONENT_GROUPS = [
   ['belt', 'Belt'],
   ['structure', 'Structure and safety'],
 ];
+
+/**
+ * An alarm belongs to the part its rule MEASURED, which the gateway records in
+ * the evidence. Fault families are shared across parts (both vibration rules
+ * and the IR spot rule are `idler_anomaly`), so matching on family alone lit
+ * the IR idler spot for a vibration fault at the head shaft bearing. Older
+ * alarm rows without a component fall back to the family.
+ */
+export function alarmBelongsTo(alarm, component) {
+  let recorded = null;
+  try { recorded = JSON.parse(alarm.evidence ?? 'null')?.component ?? null; } catch { /* legacy row */ }
+  return recorded ? recorded === component.id : component.families.includes(alarm.family);
+}
 
 const RANK = ['healthy', 'observe', 'planned_inspection', 'urgent_inspection', 'critical'];
 const worseOf = (a, b) => (RANK.indexOf(a) >= RANK.indexOf(b) ? a : b);
@@ -219,15 +255,15 @@ const worseOf = (a, b) => (RANK.indexOf(a) >= RANK.indexOf(b) ? a : b);
  * `causes` carries the measurement, the limit and the ratio for every rule
  * that had something to say, so the UI can always answer "why this colour".
  */
-export function componentStatus({ channels, alarms, metrics, joints }) {
+export function componentStatus({ channels, alarms, metrics, joints, model = 'mining' }) {
   const byId = [];
 
-  for (const c of COMPONENTS) {
+  for (const c of componentsFor(model)) {
     const seen = c.watch.filter((ch) => channels[ch] && channels[ch].state !== 'never');
     const liveChans = seen.filter((ch) => channels[ch].state === 'live');
 
     const mine = metrics.filter((m) => m.component === c.id);
-    const myAlarms = alarms.filter((a) => c.families.includes(a.family) && !a.joint_id);
+    const myAlarms = alarms.filter((a) => !a.joint_id && alarmBelongsTo(a, c));
 
     // A metric with no finite ratio reached no verdict - its threshold is
     // missing or zero, so the rule could not judge anything. It counts as "a

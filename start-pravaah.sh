@@ -96,7 +96,7 @@ echo "  ---------------------------------------------------------"
 if [ -n "${RELAY_PUBLISH_SECRET:-}" ]; then
   echo "  relay      publishing to api.sih.shubhang.dev"
 else
-  echo "  relay      local only (no RELAY_PUBLISH_SECRET; see deploy/.env.example)"
+  echo "  relay      OFF - local only (set RELAY_PUBLISH_SECRET in deploy/.env to publish)"
 fi
 
 node server/index.js &

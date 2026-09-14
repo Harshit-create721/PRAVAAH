@@ -117,7 +117,7 @@ export function evaluateJointPass(store, conveyor, pass) {
   const take = (m) => {
     metrics.push(m);
     risk = worse(risk, m.level);
-    if (breached(m)) findings.push({ family: m.family, level: m.level, rule: m.rule, message: m.message, measured: m.measured });
+    if (breached(m)) findings.push({ family: m.family, level: m.level, rule: m.rule, message: m.message, measured: m.measured, component: m.component, ratio: m.ratio });
     return m;
   };
 
@@ -233,7 +233,7 @@ export function evaluateTelemetry(conveyor, values) {
   const take = (m) => {
     metrics.push(m);
     risk = worse(risk, m.level);
-    if (breached(m)) findings.push({ family: m.family, level: m.level, rule: m.rule, message: m.message, measured: m.measured });
+    if (breached(m)) findings.push({ family: m.family, level: m.level, rule: m.rule, message: m.message, measured: m.measured, component: m.component, ratio: m.ratio });
     return m;
   };
 
@@ -256,13 +256,15 @@ export function evaluateTelemetry(conveyor, values) {
     });
   }
 
-  // Thermal delta above ambient.
+  // Surface temperature above the IR sensor's own body temperature. The MLX90614
+  // reports its die temperature as `ambient`; that is close to, but not, air
+  // temperature, so the message must not call it ambient air.
   if (Number.isFinite(values.temperature) && Number.isFinite(values.ambient)) {
     const d = values.temperature - values.ambient;
     take(gauge({
       rule: 'thermal_delta', family: 'idler_anomaly', component: 'idlers',
       value: d, limit: th.tempRiseC, unit: 'K',
-      message: `Surface ${fmt(d, 1)} K above ambient (limit ${th.tempRiseC} K)`,
+      message: `Surface ${fmt(d, 1)} K above the IR sensor body temperature (limit ${th.tempRiseC} K)`,
       measured: { temperature: values.temperature, ambient: values.ambient, delta_k: d },
     }));
   } else {
