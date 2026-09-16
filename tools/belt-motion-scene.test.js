@@ -1,8 +1,10 @@
+import { SENSOR_COMPONENTS, canInspectComponent, visionDamageReadings } from '../web/sensor-inspection.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { createContext, runInContext } from 'node:vm';
 import { motionReading, advanceMotion, motionFaces, miningMaterialFaces, rollerMotionFaces } from '../web/belt-motion.js';
+import { MINING_MODEL, miningAsset, miningParts, miningStaticFaces, miningMovingFaces, indexMiningParts } from '../web/mining-model.js';
 
 // Exercise the real app scene/controller against a small DOM adapter. No fake
 // readings reach the running gateway or database.
@@ -16,7 +18,8 @@ export function sceneFixture() {
       replaceChildren() { this.innerHTML = ''; this.childNodes = []; } });
     return elements.get(id);
   };
-  const context = createContext({ motionReading, advanceMotion, motionFaces, miningMaterialFaces, rollerMotionFaces, $: element,
+  const context = createContext({ motionReading, advanceMotion, motionFaces, miningMaterialFaces, rollerMotionFaces,
+    SENSOR_COMPONENTS, canInspectComponent, visionDamageReadings, populateSensorComponents() {}, MINING_MODEL, miningAsset, miningParts, miningStaticFaces, miningMovingFaces, indexMiningParts, $: element,
     storage: { get: () => null, set() {} }, matchMedia: () => ({ matches: false, addEventListener() {} }),
     IntersectionObserver: class { constructor(callback) { listeners.intersection = callback; } observe() {} },
     document: { hidden: false, activeElement: null, addEventListener: (name, fn) => { listeners[name] = fn; } },
@@ -91,4 +94,27 @@ test('pause, visibility loss, zero speed and a replay gap stop the actual animat
   assert.equal(f.pending(), 0);
   assert.match(f.element('motionStatus').textContent, /speed unavailable/);
   assert.match(f.element('motionSource').textContent, /Recorded playback/);
+});
+
+test('the imported mining asset uses the real controller cache, motion and pause controls', () => {
+  const f = sceneFixture();
+  const mining = cv(); mining.geometry.model = 'mining';
+  f.context.controller.renderSchematic(mining); f.step(0); f.step(100);
+  const cache = f.context.controller.cache();
+  assert.ok(cache.faces.length > 10000);
+  assert.ok(cache.faces.some(face => face.comp === 'drive_motor'));
+  assert.ok(cache.faces.every(face => !face.part && face.comp !== 'material_flow'));
+  const first = f.uploads.at(-1);
+  f.step(200);
+  assert.equal(f.context.controller.cache(), cache);
+  // The first scheduled motion frame at 100 ms initializes the clock. The
+  // following 100 ms at 0.4 m/s must advance 0.04 m, independently of rig size.
+  assert.ok(Math.abs(f.context.controller.motion().travel / 43 - .04) < 1e-9);
+  assert.notDeepEqual(f.uploads.at(-1).at(-1).modelPoints, first.at(-1).modelPoints);
+  f.element('modelMotion').onclick();
+  const distance = f.context.controller.motion().travel;
+  f.step(800);
+  assert.equal(f.context.controller.motion().travel, distance);
+  f.context.controller.svgFallback();
+  assert.match(f.element('sceneSurfaces').innerHTML, /data-comp="drive_motor/);
 });

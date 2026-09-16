@@ -331,7 +331,7 @@ a:hover { color: #8befe0; }
   background: none; border: 0; border-left: 2px solid transparent;
   font-family: var(--sans); color: var(--text);
 }
-.pc-row:hover { background: #14242c; }
+button.pc-row:hover { background: #14242c; }
 .pc-row.on { background: #142b31; border-left-color: var(--lamp); }
 .pc-dot { grid-area: dot; width: 7px; height: 7px; border-radius: 50%; }
 .pc-name {
@@ -865,7 +865,7 @@ a.summary-card:hover { border-color: #52727e; color: var(--text); }
 .view-btns button { padding: 8px 10px; min-height: 34px; }
 .view-btns button:first-child { border-radius: 6px 0 0 6px; }
 .view-btns button:last-child { border-radius: 0 6px 6px 0; }
-#modelLabels[aria-pressed="true"], #modelTextures[aria-pressed="true"] { color: var(--lamp); border-color: #3a716e; }
+#modelLabels[aria-pressed="true"] { color: var(--lamp); border-color: #3a716e; }
 #modelMotion[aria-pressed="true"] { color: var(--lamp); border-color: #3a716e; }
 .model-motion { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 6px 18px; padding: 9px 18px; color: var(--dim); font-size: 11px; border-bottom: 1px solid var(--line-soft); }
 .model-motion > span:first-child { display: flex; align-items: center; gap: 8px; }
@@ -1021,3 +1021,19 @@ body.alarm-flash .summary-strip .summary-card:nth-child(3) { animation: alarmPul
 .asset-context #assetMeta { font-size: 11px; color: var(--dimmer); }
 .node-sub { display: block; margin-top: 2px; font-family: var(--mono); font-size: 9.5px; letter-spacing: 0.04em; color: var(--dimmer); font-weight: 400; }
 .alarm-dialog .select { margin-left: 0; }
+
+/* Imported Blender part browser; native controls retain keyboard access. */
+.model-parts { border-top: 1px solid var(--line, #30404c); padding: 10px 16px; }
+.model-parts summary { cursor: pointer; font-size: 12px; }
+.model-parts summary span { color: var(--muted, #9badbd); margin-left: 10px; }
+.model-parts-controls { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; padding-top: 10px; }
+.model-parts-controls input, .model-parts-controls select { min-width: 0; padding: 8px; border: 1px solid #46535c; background: #16212a; color: #e2e8ec; }
+.model-parts-controls select { flex: 1 1 340px; max-width: 100%; }
+.model-parts-controls label { font-size: 12px; }
+
+/* Structural rows provide coverage context without offering inspection. */
+div.pc-row { cursor: default; }
+.vision-damage { grid-column: 1 / -1; display: flex; align-items: center; gap: 16px; margin: 0; padding: 12px; border: 1px solid var(--line); border-radius: 8px; }
+.vision-damage svg { flex-shrink: 0; max-width: 40%; }
+.vision-damage p { margin: 6px 0; }
+.vision-damage small { color: var(--dim); }

@@ -58,7 +58,7 @@ export default {
       label: 'Bench test conveyor',
       // Which physical machine the 3D view and part roster describe:
       // 'bench' = the flat-belt demo rig (photo in ConveryBelt/),
-      // 'mining' = a troughed mining conveyor (target deployment).
+      // 'mining' = the imported MC-120 mining conveyor visualization.
       model: 'mining',
 
       // --- Measured geometry. Fill these in from the rig. ---

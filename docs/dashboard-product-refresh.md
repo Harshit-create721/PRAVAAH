@@ -16,7 +16,7 @@ operator use and product presentations.
 - Neutral steel lighting, an open tapered hopper, motor cooling fins, pulley hubs,
   casing bolts and a corrected longitudinal take-up screw.
 - Material textures: brushed steel, fine rubber grain, painted-metal stipple and
-  granular coal. The Textures button beside Labels switches back to plain shading.
+  consistent surface detail. Textures remain on; there is no texture toggle.
   GPU textures follow model coordinates through orbit and zoom; the SVG fallback
   uses lighter shared patterns. No external texture downloads are needed.
   Texture contrast is reduced on components carrying a health colour, and joint
@@ -24,10 +24,22 @@ operator use and product presentations.
 - Component search and filters for attention or instrumented parts. Lost sensors
   are included in attention. Joint history remains accessible in fullscreen.
 
-The model is reference geometry. Its static load and shape do not claim to measure
-the installed machine or its current material load. Colours and readings continue
+The model is reference geometry. Ore meshes are excluded from the dashboard. Its
+shape does not claim to measure the installed machine. Colours and readings continue
 to come from sensor and rule data. Unmonitored parts remain neutral, and the ML
 baseline score remains separate from failure probability.
+
+## Sensor inspection
+
+- Only motor, conveyor belt and roller assemblies are selectable through the scene,
+  keyboard targets, component chooser or roster. Structure stays visible as context.
+- Roller detail includes `hall_rpm`, labeled Belt RPM (Hall), from the existing Hall
+  sensor. It is a shared reading, not an independently measured speed for each roller.
+- Positive `crack_length`, `opening` or `edge_separation` values in a joint's latest
+  vision data add a clickable wear indicator and measured millimetre readings. Missing
+  or zero damage values do not create a wear graphic. The scar is schematic, not a
+  localized camera reconstruction. Joint history remains available from the detail.
+- The vision feed still needs hardware integration; no synthetic damage is published.
 
 ## Data handling
 

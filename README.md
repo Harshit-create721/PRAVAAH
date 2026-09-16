@@ -1,6 +1,14 @@
 # PRAVAAH — conveyor integrity for Indian mining
 
-To preview the animated conveyor using the supplied **BeltData recording**, run:
+On Windows, double-click **`start-beltguard.bat`** to start the dashboard and the
+supplied **BeltData recording** together. The browser opens automatically at
+**http://localhost:8812**. Keep the launcher window open while checking animations,
+Hall RPM, sensor readings and other dashboard features.
+
+Use `start-beltguard.bat /noopen` to skip opening the browser, or
+`start-beltguard.bat /live` for the hardware gateway without recorded playback.
+
+You can also start playback from a terminal:
 
 ```powershell
 npm run demo:recording
@@ -11,20 +19,29 @@ Open **http://localhost:8812**. Playback uses its own MQTT port (1884), a separa
 replay. The recorded segments loop continuously at their original rate, including
 brief gaps between segments and cycles. Stop an earlier playback before starting another.
 
-The default 3D view is a **mining conveyor**, with a troughed belt, coal load,
-loading chute, idlers and support structure. Belt markings travel around the full loop and pulley marks rotate with
-measured `belt_speed` (about 0.41 m/s in this recording). One visual circuit
-corresponds to the configured 1.20 m belt loop, roughly 2.9 seconds. Zero speed,
-missing/stale speed, an offline speed node, and recording gaps hold the motion.
-**Pause motion** freezes only the animation; monitoring continues. Reduced-motion
-preferences start it paused. Direction, marking positions and pulley rotation
-are illustrative; the Hall sensor does not measure those independently.
+The default 3D view uses the **MC-120 Blender mining conveyor**, with ore removed
+and textures always enabled. Click the motor, belt or rollers, or expand **Inspect
+sensor-linked components** to select them. Roller details use the existing Hall
+reading. Wear graphics appear when vision data reports damage; the supplied
+telemetry recording does not add vision detections.
 
-The mining view also shows a moving coal bed, faceted fragments feeding through
-the hopper and tumbling off the head, and rotating carrying/return idler markings.
-These illustrate material transport; they do not report measured coal throughput.
-All motion shares the pause and sensor-freshness controls. The WebGL renderer
-targets 60 fps and reuses stationary GPU buffers; the SVG fallback targets 24 fps.
+Motion follows measured `belt_speed` (about 0.41 m/s in this recording), using
+the Blender model's actual metre dimensions. Its 23.46 m belt loop takes about
+57 seconds per visual circuit at that speed. The pilot rig's 1.20 m loop remains
+sensor calibration metadata. Zero, missing/stale speed, an offline speed node and recording gaps
+hold all motion. **Pause motion** freezes animation while monitoring continues.
+Reduced-motion preferences start it paused. Rotation, direction and marker positions remain illustrative, rather than separate
+measurements.
+
+The actual Blender geometry is bundled locally; no external model service or
+Blender connection is required to run the dashboard. WebGL uses cached static
+geometry, and SVG remains available as a fallback. Existing sensor callouts,
+alarm colors, joint history, inspection, camera presets and fullscreen controls
+are connected to the imported model. Unmonitored parts retain their original
+material colors and are labeled explicitly in the health roster.
+
+See [Blender model integration](docs/blender-model-integration.md) for the source
+file, geometry exporter, monitoring map, controls and verification commands.
 
 The same animation works with live sensors on the normal gateway at port 8811.
 Recorded playback is labelled on the model and in exported status reports;
@@ -87,11 +104,11 @@ One Node process does all four server jobs: it *is* the MQTT broker, the
 validator, the database and the web server. Nothing else to install and
 nothing to configure between them.
 
-**On the control-room laptop, double-click `start-beltguard.bat`.** It checks that
-Node is present and new enough, installs dependencies on first run, prints the
-IP address to put in the ESP32 sketch, opens the dashboard, and starts the
-gateway. Switches: `/noopen` to skip the browser, `/bench` to also start the
-test harness of §9.
+**For hardware use, run `start-beltguard.bat /live`.** It checks Node, installs
+dependencies on first run, prints the address for the ESP32, opens the dashboard
+at port 8811, and starts the gateway. `/noopen` skips the browser; `/bench` starts
+the live gateway with the synthetic test harness described below. Double-clicking
+without switches starts recorded playback on port 8812 instead.
 
 From a terminal, equivalently:
 

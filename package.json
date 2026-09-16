@@ -15,6 +15,7 @@
     "test:record": "node --test tools/record-session.test.js",
     "demo": "./start-pravaah.sh",
     "demo:recording": "node tools/demo-recording.js",
+    "test:model:browser": "node tools/test-model-browser.js",
     "pretest": "npm --prefix relay install --silent --no-audit --no-fund",
     "test": "node --test server/*.test.js tools/*.test.js && cd relay && npm test"
   },

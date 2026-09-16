@@ -1,9 +1,10 @@
-// Belt travel is scaled by the measured FULL loop length, not motor RPM.
+// Travel uses the displayed model's loop length when its metre scale is known.
+// A schematic without metre dimensions falls back to measured full-loop timing.
 // Hall speed has no direction/position information: marks illustrate motion,
 // and are not tracked splices or a measurement of pulley rotation.
-export function motionReading(cv, { connected, now, enabled = true, nodeOnline = true }) {
+export function motionReading(cv, { connected, now, enabled = true, nodeOnline = true, visualLoopLengthM = null }) {
   const channel = cv?.channels?.belt_speed;
-  const length = cv?.geometry?.beltLengthM;
+  const length = visualLoopLengthM ?? cv?.geometry?.beltLengthM;
   const age = now - channel?.ts;
   const valid = connected && nodeOnline && channel?.state === 'live'
     && Number.isFinite(channel.ts) && age >= -1000 && age <= 3000

@@ -21,7 +21,7 @@
  *               so an operator is never left guessing how much to trust a colour
  * `sensorHint`  what would have to be added to monitor it; null when covered
  */
-export const COMPONENTS = [
+const LEGACY_COMPONENTS = [
   // ------------------------------------------------------------- drive end
   {
     id: 'drive_pulley',
@@ -193,6 +193,26 @@ export const COMPONENTS = [
     coverage: 'Statutory trip line. Its state is wired to the plant interlock, not to this dashboard - it is drawn so nobody mistakes its absence here for absence on the machine.',
     sensorHint: 'A dry contact from the trip relay into a spare ESP32 input.',
   },
+];
+
+// The MC-120 mesh has straight carry rollers and a screw take-up. Keep rule IDs
+// stable, while avoiding selectable equipment that does not exist in this asset.
+const MINING_OVERRIDES = {
+  gearbox: { label: 'Reduction gearbox and coupling' },
+  carry_idlers: { label: 'Carrying rollers', coverage: 'The carrying rollers outside the single IR monitoring location have no individual condition sensor.' },
+  idlers: { label: 'IR monitoring location', coverage: 'One IR reading is shown at an illustrative roller station. Confirm the actual sensor target on the pilot rig; this does not monitor all rollers.' },
+  training_idler: { label: 'Belt alignment zone', coverage: 'Camera belt offset and joint marker asymmetry describe alignment here. The MC-120 has fixed side guides; it does not contain a self-aligning pivot idler.' },
+};
+const structural = (id, label, coverage) => ({ id, label, group: 'structure', watch: [], families: [], coverage, sensorHint: null });
+export const COMPONENTS = [
+  ...LEGACY_COMPONENTS.filter(c => !['snub_pulley', 'bend_pulley', 'impact_idlers', 'pull_cord'].includes(c.id))
+    .map(c => ({ ...c, ...MINING_OVERRIDES[c.id] })),
+  structural('structural_frame', 'Frame, foundations and fasteners', 'No structural strain, foundation or fastener condition measurements are installed.'),
+  structural('tail_bearing', 'Tail shaft bearings', 'Head vibration measurements do not describe the tail bearings. These bearings are unmonitored.'),
+  structural('discharge_chute', 'Discharge chute', 'The discharge plates are modeled separately; wear and blockage are not measured.'),
+  structural('receiving_bin', 'Receiving bin', 'The receiving bin has no level or weighing measurement.'),
+  structural('walkway', 'Walkway, ladder and handrails', 'Service access geometry only; no condition sensors are assigned.'),
+  structural('local_controls', 'Local isolator and emergency stop', 'Visual representation of the controls. Dashboard animation controls do not operate the physical conveyor or its emergency stop.'),
 ];
 
 /**

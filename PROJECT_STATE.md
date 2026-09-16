@@ -1,4 +1,39 @@
-# PRAVAAH — project state (checkpoint 2 + animation update, 2026-09-14)
+# PRAVAAH — project state (Blender model integration, 2026-09-15)
+
+## Blender model integration — 15 Sept 2026
+
+- Speed correction after visual review: the metre-scaled MC-120 now uses its
+  23.456 m model loop for animation timing. Reusing the 1.20 m pilot-rig loop
+  made the large model appear 19.55 times too fast. At 0.41 m/s, a model lap
+  now takes about 57 seconds. Sensor calibration and readings are unchanged.
+  Regression checks cover actual distance per elapsed second in the controller
+  and browser, alongside the existing pause/freshness controls.
+
+- Replaced the default procedural mining scene with the actual MC-120 Blender
+  model: 652 individually selectable exported parts, 16,790 faces. Source:
+  `assets/MiningConveyor.blend`; generated browser geometry:
+  `web/assets/mining-conveyor.js`; motion adapter: `web/mining-model.js`.
+- Preserved measured-loop speed calibration, paused/stale/offline motion holds,
+  sensor readouts, per-assembly fault colors, joint markers/history, camera
+  controls, textures, fullscreen, keyboard inspection and SVG fallback.
+- Added a searchable per-part selector and mapped every imported piece to a
+  monitoring assembly without inflating rule, alarm or instrumentation counts.
+  Added the new structural/discharge/access assemblies as unmonitored. Removed
+  absent snub/bend/impact/pull-cord entries; retained alignment rule ID with an
+  accurate fixed-guide label. The bench view remains supported.
+- `npm test`: 68 gateway/tool + 49 relay tests passed. Geometry checks: 84 passed.
+  Isolated Chrome verification covers imported rendering, part search/selection,
+  fault inspection, motion and freshness controls, all cameras, labels, textures,
+  fullscreen, joint history and SVG fallback. See
+  `_snapshots/blender-model-verification/` for screenshots/results.
+- Documentation: `docs/blender-model-integration.md`. Before-change backup:
+  `_snapshots/2026-09-15_before-blender-model.zip`.
+- The replay demo uses the existing separate database and local ports 8812/1884.
+  No new sensor values or hardware-control commands were added. The older
+  review findings below remain separate from this model integration.
+
+---
+
 
 ## Animation update — 14 Sept 2026
 

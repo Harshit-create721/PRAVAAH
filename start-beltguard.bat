@@ -5,10 +5,12 @@ title PRAVAAH - conveyor integrity
 rem ===========================================================================
 rem  PRAVAAH launcher (file name kept: shortcuts and docs point at it)
 rem  Double-click this on the factory laptop. It checks the toolchain, installs
-rem  dependencies the first time, prints the address the ESP32 must publish to,
-rem  and starts the gateway.
+rem  dependencies the first time, and starts the dashboard with recorded data.
+rem  Use /live to run the gateway for hardware sensors instead.
 rem
 rem  Optional switches:
+rem     start-beltguard.bat             dashboard + looping BeltData playback
+rem     start-beltguard.bat /live       live hardware gateway, no replay
 rem     start-beltguard.bat /noopen     do not open the browser
 rem     start-beltguard.bat /bench      also start the wire-protocol test
 rem                                     harness (synthetic frames - NOT sensor
@@ -19,9 +21,14 @@ cd /d "%~dp0"
 
 set OPEN=1
 set BENCH=0
+set PLAYBACK=1
 for %%a in (%*) do (
     if /i "%%~a"=="/noopen" set OPEN=0
-    if /i "%%~a"=="/bench"  set BENCH=1
+    if /i "%%~a"=="/live"   set PLAYBACK=0
+    if /i "%%~a"=="/bench" (
+        set BENCH=1
+        set PLAYBACK=0
+    )
 )
 
 echo.
@@ -75,6 +82,9 @@ if not exist "node_modules\aedes\" (
 )
 echo   [ok] Dependencies present
 
+rem Recorded mode runs the gateway and replay together on isolated local ports.
+if "%PLAYBACK%"=="1" goto :playback
+
 rem ------------------------------------------------- address for sensor nodes
 echo.
 echo   ---------------------------------------------------------------
@@ -118,7 +128,21 @@ if "%BENCH%"=="1" (
 echo   Starting gateway. Press Ctrl+C to stop.
 echo.
 node server\index.js
+goto :checkexit
 
+:playback
+echo.
+echo   Starting dashboard with the supplied BeltData recording.
+echo   Dashboard: http://localhost:8812
+echo   Playback loops at original speed; short segment gaps are preserved.
+echo   Press Ctrl+C to stop the dashboard and recording together.
+echo   Use start-beltguard.bat /live when connecting hardware sensors.
+echo.
+set PLAYBACK_ARGS=
+if "%OPEN%"=="1" set PLAYBACK_ARGS=--open
+node tools\demo-recording.js %PLAYBACK_ARGS%
+
+:checkexit
 rem --------------------------------------------------------------- exit paths
 set EXITCODE=%ERRORLEVEL%
 echo.
@@ -132,8 +156,9 @@ if "%EXITCODE%"=="-1073741510" goto :stopped
 echo   [X] The gateway stopped with exit code %EXITCODE%.
 echo.
 echo       Most likely causes:
-echo         - port 8811 or 1883 already in use ^(another copy running?^)
-echo         - data\beltguard.db is open in another program
+echo         - selected ports already in use ^(playback: 8812/1884; live: 8811/1883^)
+echo         - the selected database is open in another program
+echo           playback: data\replay-animation.db; live: data\beltguard.db
 echo       The lines above this banner carry the actual error.
 goto :done
 

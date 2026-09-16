@@ -333,7 +333,7 @@ const Scene3D = (() => {
         modelPoints: clipped.map(p => p.slice(3, 6)),
         material: face.flat ? 0 : MATERIALS[face.material] ?? 0,
         textureStrength: face.textureStrength ?? 1,
-        color: hex2rgb(lit).map(v => v / 255), comp: face.comp ?? null });
+        color: hex2rgb(lit).map(v => v / 255), comp: face.comp ?? null, part: face.part ?? null });
     }
     return out;
   }
@@ -352,9 +352,9 @@ const Scene3D = (() => {
         const w = 1 - u - v;
         if (Math.min(u, v, w) < -1e-7) continue;
         const depth = 1 / (u / a[2] + v / b[2] + w / c[2]);
-        const isSelected = selected !== null && face.comp === selected;
+        const isSelected = selected !== null && (face.comp === selected || face.part === selected);
         if ((isSelected && !selectedHit) || (isSelected === selectedHit && depth < closest)) {
-          closest = depth; hit = face.comp; selectedHit = isSelected;
+          closest = depth; hit = face.part ?? face.comp; selectedHit = isSelected;
         }
       }
     }
@@ -369,7 +369,7 @@ const Scene3D = (() => {
    * `flat` (skip shading - used for indicator bands that must keep their
    * exact status colour), and `glow`.
    */
-  function render(faces, cam, textures = true) {
+  function render(faces, cam, textures = true, selected = null) {
     const out = [];
     for (const f of faces) {
       const cs = clipNear(f.pts.map((p) => toCam(p, cam)));
@@ -387,19 +387,21 @@ const Scene3D = (() => {
       const depth = cs.reduce((s, p) => s + p[2], 0) / cs.length;
       // A two-sided face seen from behind is lit by its flipped normal, so the
       // underside of the belt is shaded rather than left flat black.
-      const lit = f.flat
+      let lit = f.flat
         ? (f.color ?? FALLBACK)
         : shade(f.color, dot(nr, c) > 0 ? [-nr[0], -nr[1], -nr[2]] : nr, f);
       // `edge` outlines a face in a darker shade of its own colour. Two steel
       // parts touching at a shallow angle shade almost identically, and
       // without an edge they fuse into one blob - which matters here because
       // most of a conveyor is unmonitored and therefore all the same grey.
+      const isSelected = selected !== null && (f.comp === selected || f.part === selected);
+      if (selected && !isSelected) lit = rgb2hex(hex2rgb(lit).map((v, i) => v * .24 + [9, 15, 19][i]));
       const edge = f.edge ? rgb2hex(hex2rgb(lit).map((v) => v * 0.5)) : null;
-      out.push({ f, proj, depth, lit, edge });
+      out.push({ f, proj, depth, lit, edge, isSelected });
     }
 
     // Painter's algorithm: furthest first.
-    out.sort((a, b) => b.depth - a.depth);
+    out.sort((a, b) => Number(a.isSelected) - Number(b.isSelected) || b.depth - a.depth);
 
     // A lightweight stipple/grain treatment for machines without WebGL.
     // GPU rendering uses continuous model-space textures; SVG uses shared
@@ -422,7 +424,7 @@ const Scene3D = (() => {
         f.stroke ? `stroke="${f.stroke}" stroke-width="${f.strokeWidth ?? 0.8}"`
           : edge ? `stroke="${edge}" stroke-width="0.5"` : 'stroke="none"',
         f.opacity !== undefined ? `opacity="${f.opacity}"` : '',
-        f.comp ? `data-comp="${esc(f.comp)}"` : 'pointer-events="none"',
+        f.comp ? `data-comp="${esc(f.part ?? f.comp)}"` : 'pointer-events="none"',
         f.dash ? `stroke-dasharray="${f.dash}"` : '',
         f.cls ? `class="${f.cls}"` : '',
       ].filter(Boolean).join(' ');

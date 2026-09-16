@@ -8,7 +8,9 @@ import config from '../server/config.js';
 
 const root = join(import.meta.dirname, '..');
 const directory = join(root, 'BeltData', '2026-09-06T17-29-57.647Z-a70e3e55-cleaned-v1');
-if (!existsSync(join(directory, 'telemetry.frames.jsonl'))) throw new Error(`Recording missing: ${directory}`);
+for (const file of ['telemetry.frames.jsonl', 'telemetry.csv']) {
+  if (!existsSync(join(directory, file))) throw new Error(`Recording missing: ${join(directory, file)}`);
+}
 config.relay.enabled = false;
 config.http = { host: '127.0.0.1', port: 8812 };
 config.mqtt = { embedded: true, host: '127.0.0.1', port: 1884, url: 'mqtt://127.0.0.1:1884' };
@@ -33,3 +35,11 @@ const replay = spawn(process.execPath, [join(import.meta.dirname, 'replay-record
 replay.on('error', error => { console.error(`[playback] ${error.message}`); process.exit(1); });
 replay.on('exit', code => console.log(`[playback] Recording ended (${code ?? 'stopped'}). Dashboard remains available; restart this command to play again.`));
 process.on('exit', () => replay.kill());
+
+// The Windows batch launcher requests this only after the gateway is ready.
+if (process.argv.includes('--open') && process.platform === 'win32') {
+  const browser = spawn(join(process.env.SystemRoot ?? 'C:\\Windows', 'explorer.exe'),
+    ['http://localhost:8812'], { stdio: 'ignore', windowsHide: true });
+  browser.on('error', error => console.error(`[playback] Could not open the browser: ${error.message}. Open http://localhost:8812 manually.`));
+  browser.unref();
+}

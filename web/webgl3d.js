@@ -177,8 +177,8 @@ globalThis.ConveyorViewport = class {
     if (staticFaces && (this.staticCache?.faces !== staticFaces
       || this.staticCache.selected !== selected || this.staticCache.textures !== textures)) {
       this.staticCache = { faces: staticFaces, selected, textures,
-        context: { buffer: this.staticBuffers[0], items: selected ? staticFaces.filter(f => f.comp !== selected) : staticFaces },
-        selectedPart: { buffer: this.staticBuffers[1], items: selected ? staticFaces.filter(f => f.comp === selected) : [] } };
+        context: { buffer: this.staticBuffers[0], items: selected ? staticFaces.filter(f => (f.comp !== selected && f.part !== selected)) : staticFaces },
+        selectedPart: { buffer: this.staticBuffers[1], items: selected ? staticFaces.filter(f => (f.comp === selected || f.part === selected)) : [] } };
     }
     const moving = staticFaces ? faces.slice(staticFaces.length) : faces;
     const batch = (selectedPart) => {
@@ -186,7 +186,7 @@ globalThis.ConveyorViewport = class {
         const cached = selectedPart ? this.staticCache.selectedPart : this.staticCache.context;
         draw(cached.items, !!selected && !selectedPart, cached);
       }
-      draw(selected ? moving.filter(f => (f.comp === selected) === selectedPart) : moving, !!selected && !selectedPart);
+      draw(selected ? moving.filter(f => ((f.comp === selected || f.part === selected)) === selectedPart) : moving, !!selected && !selectedPart);
     };
     if (selected) {
       batch(false);

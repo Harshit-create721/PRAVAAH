@@ -1,9 +1,11 @@
+import { SENSOR_COMPONENTS, ROLLER_COMPONENTS, canInspectComponent, inspectionChannels, visionDamageReadings } from './sensor-inspection.js';
+import { MINING_MODEL, miningAsset, miningStaticFaces, miningMovingFaces, miningAnchors, toModel } from './mining-model.js';
 import {
   attachModelFullscreen, filterComponents, historyCSV, axisRange, formatTime, nodeName,
   humanReason, sustainedML, RULE_TEXT, ruleTitle, ENGINEERING_CHANNELS,
 } from './dashboard-ui.js';
 import { statusReportHTML } from './readiness.js';
-import { motionReading, advanceMotion, motionFaces, miningMaterialFaces, rollerMotionFaces } from './belt-motion.js';
+import { motionReading, advanceMotion, motionFaces } from './belt-motion.js';
 
 // PRAVAAH dashboard client.
 //
@@ -301,22 +303,11 @@ function renderRisk(cv) {
 
 // --------------------------------------------------------------- schematic
 //
-// A 3D model of the conveyor, drawn to SVG by scene3d.js. Every part is a hit
-// target coloured by what the rules currently measure about it.
-//
-// The machine drawn here is a mining ROM belt, not a generic box-and-two-
-// circles diagram: troughed carrying run on three-roll idler sets, impact
-// idlers under the loading chute, a self-aligning set, flat return idlers,
-// snub and bend pulleys, a shaft-mounted gearbox on the head shaft, screw
-// take-up at the tail, a head scraper and the statutory pull-cord. The point
-// is not decoration. Once wear is read per component, an operator has to be
-// able to find the part on screen that matches the part in front of them, and
-// that only works if the picture is of their machine.
-//
-// The discipline that matters is UNMONITORED - a component nothing can see is
-// drawn as bare neutral metal, never green, because "we
-// have no sensor here" and "this part is fine" must never look the same. Most
-// of this machine is unmonitored today, and the model says so.
+// The default mining view imports the actual Blender MC-120 meshes through
+// mining-model.js. Scene3D and ConveyorViewport retain projection, picking,
+// status coloring and the offline SVG fallback. The bench rig stays procedural.
+// Individual pieces belong to monitoring assemblies; a selected bolt does not
+// acquire its own sensor or alter the gateway's alarm/coverage counts.
 
 const COMP_COLOR = {
   unmonitored: '#687988',
@@ -358,7 +349,7 @@ const COAL = '#263039';
 const AMB = 0.64;
 
 // Model dimensions, in arbitrary units. +x along the belt, +y up, +z across.
-const M = {
+const BENCH_MODEL = {
   x0: -215, x1: 215,      // tail / head pulley centres
   cy: 0,                  // belt centreline height
   r: 25,                  // pulley radius, and therefore the belt path radius
@@ -371,6 +362,8 @@ const M = {
   rail: 56,               // stringer offset either side of the centreline
   railY: -41,             // stringer height
 };
+
+const M = { ...MINING_MODEL };
 
 /** How troughed the belt is at a given x - see Scene3D.beltPath. */
 const troughAt = (x) =>
@@ -404,7 +397,7 @@ const DETAIL = { run: 24, wrap: 18, cols: 6, pulley: 36, roll: 16, small: 12, de
 // A long machine on one screen wants a LONG lens: raising dist and focal
 // together keeps the size but flattens the perspective, so the conveyor
 // reads as a machine drawing rather than a wide-angle photograph of one.
-const cam = { yaw: -0.66, pitch: 0.36, dist: 1420, focal: 1420, cx: 389, cy: 194, tx: 0, ty: 0, tz: 0 };
+const cam = { yaw: -0.45, pitch: 0.42, dist: 1250, focal: 1420, cx: 436, cy: 210, tx: 48, ty: 0, tz: 0 };
 const HOME = { ...cam };
 
 let compIndex = {};
@@ -429,6 +422,7 @@ function beltDrive() {
     connected: gatewayLive(), enabled: motionEnabled,
     now: snap ? snap.server.now + Date.now() - snapshotReceivedAt : Date.now(),
     nodeOnline: !node || node.state === 'live',
+    visualLoopLengthM: lastCv?.geometry?.model === 'bench' ? null : miningAsset.loopLength,
   });
 }
 
@@ -450,7 +444,7 @@ function scheduleMotion() {
   motionRaf = requestAnimationFrame(frame => {
     motionRaf = 0;
     if (!motionVisible || document.hidden) { motion.at = null; return; }
-    // Reuse the static geometry and labels. Only belt/pulley marks are rebuilt.
+    // Reuse static geometry and labels; update only moving part transforms.
     if (frame - motionFrameAt >= 1000 / (viewport?.ready === false || !viewport ? 24 : 60) - .5) {
       motionFrameAt = frame;
       const reading = beltDrive();
@@ -496,6 +490,7 @@ let benchFramed = false;
 function renderSchematic(cv) {
   $('modelEmpty').hidden = true;
   if (lastCv?.id !== cv.id) { resetMotionClock(); motion.phase = 0; motion.rotation = 0; motion.travel = 0; }
+  Object.assign(M, cv.geometry?.model === 'bench' ? BENCH_MODEL : MINING_MODEL);
   lastCv = cv;
   if (beltDrive().status !== 'moving') resetMotionClock();
   renderMotionStatus();
@@ -508,6 +503,8 @@ function renderSchematic(cv) {
   }
   compIndex = {};
   for (const c of cv.components ?? []) compIndex[c.id] = c;
+  if (focusComp && !canInspectComponent(focusComp, cv)) focusComp = null;
+  populateSensorComponents();
   requestDraw(false);
   scheduleMotion();
 }
@@ -591,23 +588,19 @@ function drawScene() {
     const p = partPaint(st(id), base);
     const material = base === RUBBER ? 'rubber'
       : ['drive_motor', 'gearbox', 'loading_chute', 'pull_cord'].includes(id) ? 'paint' : 'steel';
-    return { color: p.color, stroke: p.stroke, dash: p.dash, comp: id, ambient: AMB, edge: true,
+    return { color: p.color, stroke: p.stroke, dash: p.dash, comp: SENSOR_COMPONENTS.has(id) ? id : null, ambient: AMB, edge: true,
       material, textureStrength: VAGUE.has(st(id)) ? 1 : 0.35 };
   };
   /** Bare structure: visible, but not a component anything reports on. */
   const plain = (color = DARK_STEEL, extra = {}) => ({ color, ambient: AMB, edge: true, material: 'paint', ...extra });
 
-  // ---- the belt itself, lofted along the closed path.
-  //
-  // The carrying run is troughed and flattens into each pulley; the return run
-  // is flat. Splitting the loft at the return run lets the carcass and the
-  // tracking rules own the halves of the belt they can actually speak for.
+  const bench = cv.geometry?.model === 'bench';
+  const secOpts = { width: M.width, troughRise: 0, flat: 1, cols: q.cols };
+  if (bench) {
   const path = Scene3D.beltPath({
     x0, x1, cy, r, runSegs: q.run, wrapSegs: q.wrap, taper: M.taper,
   });
-  const bench = cv.geometry?.model === 'bench';
-  // The bench rig runs a flat belt; the mining conveyor is troughed.
-  const secOpts = { width: M.width, troughRise: bench ? 0 : M.trough, flat: M.flat, cols: q.cols };
+  // Both the bench rig and the imported MC-120 use a flat carrying belt.
   const secs = path.map((s) => Scene3D.beltSection(s, secOpts));
   {
     const pt = partPaint(st('belt_tracking'), RUBBER);
@@ -631,164 +624,10 @@ function drawScene() {
     }
   }
 
-  if (bench) {
     drawBenchRig(faces, q, paint, plain);
-  } else { // ---- mining conveyor geometry, through the pull-cord
-
-  // The coal bed and fragments are drawn in the moving layer in paintScene().
-
-  // ---- head (drive) pulley, tail pulley, and the shaft through each
-  for (const [x, id] of [[x0, 'tail_pulley'], [x1, 'drive_pulley']]) {
-    faces.push(...Scene3D.cylinderZ([x, cy, 0], r - 1.5, face, q.pulley, paint(id)));
-    // End discs read as the pulley crown without poking through the belt.
-    for (const s of [-1, 1]) {
-      faces.push(...Scene3D.cylinderZ([x, cy, s * (face / 2 + 1)], r + 2.5, 2.5, q.pulley,
-        paint(id, '#3d434c')));
-    }
-    faces.push(...Scene3D.cylinderZ([x, cy, 0], 5.5, face + 46, q.small, paint(id)));
+  } else {
+    faces.push(...miningStaticFaces(paint));
   }
-
-  // ---- snub and bend pulleys, tucked under the return run
-  faces.push(...Scene3D.cylinderZ([x1 - 62, cy - r - 11, 0], 11, M.width + 6, q.pulley,
-    paint('snub_pulley')));
-  faces.push(...Scene3D.cylinderZ([x0 + 72, cy - r - 10, 0], 10, M.width + 6, q.pulley,
-    paint('bend_pulley')));
-
-  // ---- head shaft bearings: plummer block and pedestal, both sides
-  for (const s of [-1, 1]) {
-    const z = s * (face / 2 + 16);
-    faces.push(...Scene3D.cylinderZ([x1, cy, z], 12, 18, q.small, paint('drive_bearing')));
-    faces.push(...Scene3D.box([x1, cy - 17, z], [30, 16, 26], paint('drive_bearing')));
-  }
-
-  // ---- screw take-up at the tail. The tail bearings ride on it, so the
-  //      housings and the adjusting screws are one component.
-  for (const s of [-1, 1]) {
-    const z = s * (face / 2 + 16);
-    faces.push(...Scene3D.box([x0 + 2, cy, z], [30, 30, 24], paint('takeup')));
-    faces.push(...Scene3D.cylinderBetween([x0 - 52, cy, z], [x0 + 2, cy, z], 3.5, q.small, paint('takeup')));
-    faces.push(...Scene3D.box([x0 - 52, cy, z], [10, 14, 14], paint('takeup')));
-  }
-
-  // ---- drive train: shaft-mounted gearbox on the head shaft, fluid coupling,
-  //      motor, all on a common base frame with a torque arm to it.
-  faces.push(...Scene3D.box([x1 - 10, cy - r - 46, DRIVE_Z + 34], [150, 10, 116],
-    plain('#40464f')));
-  faces.push(...Scene3D.box([x1, cy, DRIVE_Z], [58, 52, 42], paint('gearbox')));
-  faces.push(...Scene3D.box([x1 - 30, cy - 24, DRIVE_Z], [8, 46, 14], paint('gearbox')));
-  faces.push(...Scene3D.cylinderZ([x1, cy, DRIVE_Z + 34], 16, 26, q.small, paint('gearbox')));
-  faces.push(...Scene3D.cylinderZ([x1, cy, MOTOR_Z], 17, 56, q.pulley, paint('drive_motor')));
-  faces.push(...Scene3D.box([x1, cy + 20, MOTOR_Z], [24, 12, 28], paint('drive_motor')));
-  for (const zz of [MOTOR_Z - 22, MOTOR_Z + 22]) {
-    faces.push(...Scene3D.box([x1, cy - 24, zz], [30, 14, 8], paint('drive_motor', '#40464f')));
-  }
-
-  // Motor cooling fins, fan cover and gearbox casing bolts remain part of
-  // their parent component for picking and health colouring.
-  for (let i = 0; i < 12; i++) {
-    const angle = i / 12 * Math.PI * 2;
-    const x = x1 + Math.cos(angle) * 18;
-    const y = cy + Math.sin(angle) * 18;
-    faces.push(...Scene3D.cylinderBetween([x, y, MOTOR_Z - 21], [x, y, MOTOR_Z + 21],
-      1.6, 6, paint('drive_motor', '#91a2b4')));
-  }
-  faces.push(...Scene3D.cylinderZ([x1, cy, MOTOR_Z + 30], 19, 5, q.pulley, paint('drive_motor', DARK_STEEL)));
-  for (const dx of [-21, 21]) for (const dy of [-18, 18]) {
-    faces.push(...Scene3D.cylinderZ([x1 + dx, cy + dy, DRIVE_Z + 23], 2.8, 4, 6, paint('gearbox', '#abb8c5')));
-  }
-  // Pulley hubs and bearing fasteners add depth without altering belt routing.
-  for (const [x, id] of [[x0, 'tail_pulley'], [x1, 'drive_pulley']]) {
-    for (const side of [-1, 1]) {
-      faces.push(...Scene3D.cylinderZ([x, cy, side * (face / 2 + 4)], 10, 6, q.roll, paint(id, '#a0aeba')));
-    }
-  }
-
-  // ---- troughing idler sets. Three rolls each: one flat centre roll, two
-  //      wings lifted to the trough angle, which is why the belt is a V.
-  for (const s of SETS) {
-    const a = paint(s.id, s.rubber ? RUBBER : STEEL);
-    const zc = M.flat * hw;
-    const rise = M.trough * hw;
-    const yc = cy + r - s.r0 - 1.1;
-    faces.push(...Scene3D.cylinderBetween([s.x, yc, -zc], [s.x, yc, zc], s.r0, q.roll, a));
-    for (const side of [-1, 1]) {
-      faces.push(...Scene3D.cylinderBetween(
-        [s.x, yc, side * zc], [s.x, yc + rise, side * hw * 1.05], s.r0, q.roll, a));
-    }
-    if (q.detail) {
-      // The frame the set hangs in, down to the stringer either side.
-      for (const side of [-1, 1]) {
-        faces.push(...Scene3D.box(
-          [s.x, (yc + rise + M.railY) / 2, side * (hw * 1.06 + 4)],
-          [5, yc + rise - M.railY, 5], plain('#454c56')));
-      }
-    }
-  }
-
-  // ---- return idlers: single flat rolls under the return run
-  for (const x of RETURN_X) {
-    faces.push(...Scene3D.cylinderZ([x, cy - r - 7.1, 0], 6, M.width * 0.94, q.roll,
-      paint('return_idlers')));
-  }
-
-  // ---- stringers, legs, foot plates and cross bracing
-  for (const s of [-1, 1]) {
-    faces.push(...Scene3D.box([0, M.railY, s * M.rail], [(x1 - x0) + 84, 9, 9],
-      plain('#4a515c')));
-  }
-  for (const x of LEG_X) {
-    for (const s of [-1, 1]) {
-      faces.push(...Scene3D.box([x, M.railY - 40, s * M.rail], [8, 80, 8], plain('#434955')));
-      faces.push(...Scene3D.box([x, M.railY - 81, s * M.rail], [22, 4, 22], plain('#3a4049')));
-    }
-    faces.push(...Scene3D.box([x, M.railY - 72, 0], [7, 7, M.rail * 2], plain('#434955')));
-  }
-  if (q.detail) {
-    for (let i = 0; i < LEG_X.length - 1; i++) {
-      for (const s of [-1, 1]) {
-        faces.push(...Scene3D.cylinderBetween(
-          [LEG_X[i], M.railY - 78, s * M.rail], [LEG_X[i + 1], M.railY - 4, s * M.rail],
-          2.4, 4, plain('#3d434c')));
-      }
-    }
-  }
-
-  // ---- open, tapered loading hopper and skirtboards at the tail.
-  // The opening and flange distinguish the feed chute from a solid enclosure.
-  const hopperX = x0 + 52, hopperTop = cy + r + 99, hopperBottom = cy + r + 18;
-  const hopperRing = (y, hx, hz) => [[hopperX - hx, y, -hz], [hopperX + hx, y, -hz],
-    [hopperX + hx, y, hz], [hopperX - hx, y, hz]];
-  const upper = hopperRing(hopperTop, 39, 41), lower = hopperRing(hopperBottom, 24, 26);
-  for (let i = 0; i < 4; i++) {
-    const j = (i + 1) % 4;
-    faces.push({ pts: [upper[i], upper[j], lower[j], lower[i]], ...paint('loading_chute'), twoSided: true });
-  }
-  for (const side of [-1, 1]) {
-    faces.push(...Scene3D.box([hopperX, hopperTop, side * 41], [86, 5, 5], paint('loading_chute')));
-    faces.push(...Scene3D.box([hopperX + side * 41, hopperTop, 0], [5, 5, 82], paint('loading_chute')));
-  }
-  for (const s of [-1, 1]) {
-    faces.push(...Scene3D.box([x0 + 84, cy + r + 15, s * 31], [140, 24, 4],
-      paint('loading_chute')));
-  }
-
-  // ---- head scraper: blade against the pulley, arm and tensioners
-  faces.push(...Scene3D.box([x1 + r + 5, cy - 13, 0], [6, 26, M.width], paint('head_scraper')));
-  faces.push(...Scene3D.cylinderZ([x1 + r + 16, cy - 28, 0], 3.5, M.width + 34, q.small,
-    paint('head_scraper')));
-  for (const s of [-1, 1]) {
-    faces.push(...Scene3D.box([x1 + r + 16, cy - 40, s * (M.width / 2 + 18)], [8, 26, 8],
-      paint('head_scraper')));
-  }
-
-  // ---- pull-cord: the trip line down the walkway side, and two switch boxes
-  faces.push(...Scene3D.box([0, cy + r + 24, M.rail + 16], [(x1 - x0) + 40, 2.5, 2.5],
-    paint('pull_cord')));
-  for (const x of [x0 + 110, x1 - 110]) {
-    faces.push(...Scene3D.box([x, cy + r + 16, M.rail + 16], [16, 22, 13], paint('pull_cord')));
-  }
-
-  } // end of mining conveyor geometry
 
   // ---- joints: bands across the carrying run, riding the trough
   const joints = cv.joints ?? [];
@@ -797,6 +636,8 @@ function drawScene() {
     const span = (x1 - x0) - 150;
     const x = x0 + 90 + (span / Math.max(joints.length, 1)) * (i + 0.5);
     const cid = `joint:${j.id}`;
+    const damage = visionDamageReadings(j);
+    const inspectId = damage.length ? cid : null;
     const state = compIndex[cid]?.state ?? j.risk ?? 'unknown';
     const col = COMP_COLOR[state] ?? RISK_COLOR[state] ?? RISK_COLOR.unknown;
     const band = (xx) => Scene3D.beltSection(
@@ -806,20 +647,34 @@ function drawScene() {
     for (let k = 0; k < A.length - 1; k++) {
       faces.push({
         pts: [A[k], A[k + 1], B[k + 1], B[k]],
-        color: col, comp: cid, flat: true, twoSided: true,
+        color: col, comp: inspectId, flat: true, twoSided: true,
         cls: ALERT.has(state) ? 'sch-alert' : null,
       });
     }
-    jointBands.push({ id: j.id, cid, x, y: cy + r + 3, state });
+    // A schematic scar marks reported damage; it is not a camera-localized shape.
+    if (damage.length) {
+      const offsets = [-.65, -.35, -.05, .25, .6];
+      for (let k = 0; k < offsets.length - 1; k++) {
+        const a = [x + (k % 2 ? 3 : -3), cy + r + 3.2, hw * offsets[k]];
+        const b = [x + (k % 2 ? -3 : 3), cy + r + 3.2, hw * offsets[k + 1]];
+        faces.push({ pts: [a, b, [b[0] + 2, b[1], b[2]], [a[0] + 2, a[1], a[2]]],
+          color: '#efaa55', comp: cid, flat: true, twoSided: true });
+      }
+    }
+    jointBands.push({ id: damage.length ? `${j.id} / WEAR & TEAR` : j.id, cid, x, y: cy + r + 3, state });
   });
 
   // ---- a part picked out in the roster gets a halo so the eye lands on it
   if (focusComp) {
-    for (const f of faces) if (f.comp === focusComp) f.cls = `${f.cls ? f.cls + ' ' : ''}sch-focus-part`;
+    for (const f of faces) if (f.comp === focusComp || f.part === focusComp) f.cls = `${f.cls ? f.cls + ' ' : ''}sch-focus-part`;
   }
 
   partPoints = {};
-  for (const f of faces) if (f.comp) (partPoints[f.comp] ??= []).push(...f.pts);
+  const boundsFaces = bench ? faces : [...faces, ...miningMovingFaces(paint, motion)];
+  for (const f of boundsFaces) {
+    if (f.comp) (partPoints[f.comp] ??= []).push(...f.pts);
+    if (f.part) (partPoints[f.part] ??= []).push(...f.pts);
+  }
   sceneCache = { faces, prepared: Scene3D.prepare(faces, cam), secOpts, paint, bench };
   const focusedId = svg.contains(document.activeElement) ? document.activeElement.dataset.comp : null;
   // Keep labels and keyboard targets stable during motion frames.
@@ -834,25 +689,10 @@ function paintScene() {
   if (!sceneCache) return;
   const svg = $('schematic');
   const { faces, prepared, secOpts, paint, bench } = sceneCache;
-  const marks = motionFaces(Scene3D, M, secOpts, motion, paint, bench);
-  if (!bench) {
-    marks.push(...miningMaterialFaces(Scene3D, M, secOpts, motion));
-    const stripe = (id) => ({ ...paint(id, '#718792'), color: VAGUE.has(compIndex[id]?.state ?? 'unmonitored')
-      ? '#718792' : paint(id).color, ambient: .8 });
-    for (const set of SETS) {
-      const zc = M.flat * M.hw, yc = M.cy + M.r - set.r0 - 1.1;
-      const angle = -motion.travel / set.r0;
-      marks.push(...rollerMotionFaces([set.x, yc, -zc], [set.x, yc, zc], set.r0, angle, stripe(set.id)));
-      for (const side of [-1, 1]) marks.push(...rollerMotionFaces(
-        [set.x, yc, side * zc], [set.x, yc + M.trough * M.hw, side * M.hw * 1.05],
-        set.r0, angle * side, stripe(set.id)));
-    }
-    for (const x of RETURN_X) marks.push(...rollerMotionFaces(
-      [x, M.cy - M.r - 7.1, -M.width * .47], [x, M.cy - M.r - 7.1, M.width * .47],
-      6, motion.travel / 6, stripe('return_idlers')));
-  }
+  const marks = bench ? motionFaces(Scene3D, M, secOpts, motion, paint, true)
+    : miningMovingFaces(paint, motion);
   preparedFaces = [...prepared, ...Scene3D.prepare(marks, cam)];
-  const textures = $('modelTextures').getAttribute('aria-pressed') === 'true';
+  const textures = true;
   const drawn = viewport?.draw(preparedFaces, cam, focusComp, textures, prepared) ?? false;
   $('schematicCanvas').hidden = !drawn;
   svg.dataset.renderer = drawn ? 'webgl' : 'svg';
@@ -862,7 +702,7 @@ function paintScene() {
   // Labels and accessible part targets remain SVG; solid surfaces stay on GPU.
   const surface = $('sceneSurfaces');
   if (drawn) { if (surface.childNodes.length) surface.replaceChildren(); }
-  else surface.innerHTML = Scene3D.render([...faces, ...marks], cam, textures);
+  else surface.innerHTML = Scene3D.render([...faces, ...marks], cam, textures, focusComp);
 }
 
 /**
@@ -889,24 +729,29 @@ function readoutFor(cv, keys) {
 function buildLabels(cv, jointBands, q) {
   const { x0, x1, cy, r, hw } = M;
   const out = [];
+  const occupied = [];
+  const place = (point, width, height) => {
+    for (const [dx, dy] of [[0, 0], [80, 0], [-80, 0], [0, -65], [0, 65], [120, -65], [-120, -65], [160, 65], [-160, 65]]) {
+      const x = Math.max(width / 2 + 8, Math.min(864 - width / 2, point[0] + dx));
+      const y = Math.max(24, Math.min(395 - height, point[1] + dy));
+      const box = { x: x - width / 2, y: y - 16, w: width, h: height };
+      if (!occupied.some(b => box.x < b.x + b.w && box.x + box.w > b.x && box.y < b.y + b.h && box.y + box.h > b.y)) {
+        occupied.push(box); return [x, y];
+      }
+    }
+    return point;
+  };
 
   const bench = cv.geometry?.model === 'bench';
   const anchors = bench ? [
     { id: 'tail_pulley', p: [x0 - 6, cy + r + 10, -(BENCH.sideZ + 26)], text: 'TAIL' },
     { id: 'drive_pulley', p: [x1 - 6, cy + r + 34, -(BENCH.sideZ + 44)], text: 'HEAD / DRIVE' },
     { id: 'drive_motor', p: [x1 + 100, cy - 62, BENCH.gz], text: 'GEAR MOTOR' },
-  ] : [
-    { id: 'tail_pulley', p: [x0 + 2, cy + r + 6, -(M.hw + 46)], text: 'TAIL' },
-    { id: 'drive_pulley', p: [x1 + 26, cy - r - 2, -(M.hw + 34)], text: 'HEAD / DRIVE' },
-    { id: 'drive_motor', p: [x1, cy - 30, MOTOR_Z + 30], text: 'MOTOR' },
-    { id: 'gearbox', p: [x1 - 34, cy - 44, DRIVE_Z], text: 'GEARBOX' },
-    { id: 'loading_chute', p: [x0 + 52, cy + r + 62, -(M.hw + 52)], text: 'LOADING POINT' },
-    { id: 'takeup', p: [x0 - 58, cy - 54, 0], text: 'TAKE-UP' },
-  ];
+  ] : miningAnchors;
   for (const a of anchors) {
-    if (focusComp && a.id !== focusComp) continue;
+    if (focusComp && a.id !== focusComp && a.id !== compIndex[focusComp]?.parentId) continue;
     const s = compIndex[a.id]?.state ?? 'unmonitored';
-    const p = Scene3D.project(a.p, cam);
+    const p = place(Scene3D.project(a.p, cam), a.text.length * 5 + 10, 26);
     out.push(`<text class="sch-label" x="${p[0].toFixed(1)}" y="${(p[1] + 13).toFixed(1)}"
       text-anchor="middle" fill="${VAGUE.has(s) ? '#8a9ca8' : compColor(s)}" pointer-events="none">${a.text}</text>`);
   }
@@ -917,15 +762,15 @@ function buildLabels(cv, jointBands, q) {
   const sensors = [
     // Current only. Hall cycle speed has its own callout; showing it here
     // would imply a CT is fitted when none is.
-    { p: [x1, cy + 52, MOTOR_Z], label: 'CT', chans: ['motor_current_rms'],
+    { p: bench ? [x1, cy + 52, MOTOR_Z] : toModel([4.25, -2.04, 3.3]), label: 'CT', chans: ['motor_current_rms'],
       show: ['motor_current_rms'] },
-    { p: bench ? [x1 - 14, cy + 52, BENCH.sideZ + 10] : [x1, cy + 58, M.face / 2 + 16], label: 'VIB-DRIVE', chans: ['vibration_rms'],
+    { p: bench ? [x1 - 14, cy + 52, BENCH.sideZ + 10] : toModel([5, -1.09, 3.6]), label: 'VIB-DRIVE', chans: ['vibration_rms'],
       show: ['vibration_rms', 'vibration_crest'] },
     { p: [40, cy + r + 74, 0], label: 'CAM', chans: ['belt_offset_left', 'belt_offset_right'],
       show: ['belt_offset_left', 'belt_offset_right'] },
-    { p: bench ? [x0 + 96, cy + r + 44, -(BENCH.sideZ + 8)] : [x0 + 118, cy - r - 40, -(M.rail + 8)], label: 'HALL SPEED', chans: ['hall_rpm', 'motor_rpm', 'belt_speed'],
+    { p: bench ? [x0 + 96, cy + r + 44, -(BENCH.sideZ + 8)] : toModel([-3.0, 1.05, .9]), label: 'HALL SPEED', chans: ['hall_rpm', 'motor_rpm', 'belt_speed'],
       show: ['hall_rpm', 'belt_speed'] },
-    { p: bench ? [BENCH.irX, cy + r + 52, hw + 12] : [IR_X, cy - r - 34, hw + 26], label: 'IR TEMP', chans: ['temperature'],
+    { p: bench ? [BENCH.irX, cy + r + 52, hw + 12] : toModel([-.4, -1.3, 3.45]), label: 'IR TEMP', chans: ['temperature'],
       show: ['temperature', 'temperature_delta'] },
     {
       p: [x0 + 26, cy + r + 56, -(hw + 14)], label: 'MARKER L/R',
@@ -951,7 +796,8 @@ function buildLabels(cv, jointBands, q) {
     // part is being inspected, where it doubles as "what to install".
     if (!seen && !focusComp) continue;
     const col = on ? '#6f9e46' : seen ? '#d08a22' : '#3a3830';
-    const p = Scene3D.project(s.p, cam);
+    const lines = s.readout ? s.readout() : readoutFor(cv, s.show);
+    const p = place(Scene3D.project(s.p, cam), 84, 38 + (lines?.length ?? 0) * 10);
     // Leader line back to the machine surface it is mounted on.
     const base = Scene3D.project([s.p[0], cy + (s.p[1] > cy ? r : -r), s.p[2]], cam);
     out.push(`<line x1="${p[0].toFixed(1)}" y1="${p[1].toFixed(1)}" x2="${base[0].toFixed(1)}" y2="${base[1].toFixed(1)}"
@@ -963,7 +809,6 @@ function buildLabels(cv, jointBands, q) {
     // The reading itself, stacked under the marker. Same rule as everywhere
     // else in this dashboard: a channel nobody has published reads NO SIGNAL,
     // never a zero and never a dash that could pass for one.
-    const lines = s.readout ? s.readout() : readoutFor(cv, s.show);
     if (lines) {
       lines.forEach((line, i) => {
         out.push(`<text class="sch-readout" x="${p[0].toFixed(1)}" y="${(p[1] + 15 + i * 10).toFixed(1)}"
@@ -995,7 +840,7 @@ function buildLabels(cv, jointBands, q) {
   const annotations = $('modelLabels').getAttribute('aria-pressed') === 'true' ? out.join('') : '';
   out.length = 0;
   if (q.detail) {
-    for (const c of Object.values(compIndex)) {
+    for (const c of Object.values(compIndex).filter(c => canInspectComponent(c.id, cv))) {
       const points = partPoints[c.id] ?? PART_ANCHOR[c.id]?.();
       if (!points) continue;
       const bb = Scene3D.bounds(points, cam);
@@ -1036,12 +881,13 @@ const PART_ANCHOR = {
 };
 
 function componentAt(event) {
-  if (event.target?.dataset?.comp) return event.target.dataset.comp;
+  if (event.target?.dataset?.comp) return canInspectComponent(event.target.dataset.comp, lastCv) ? event.target.dataset.comp : null;
   const svg = $('schematic');
   const matrix = svg.getScreenCTM();
   if (!matrix) return null;
   const point = new DOMPoint(event.clientX, event.clientY).matrixTransform(matrix.inverse());
-  return Scene3D.pick(preparedFaces, point.x, point.y, focusComp);
+  const id = Scene3D.pick(preparedFaces, point.x, point.y, focusComp);
+  return canInspectComponent(id, lastCv) ? id : null;
 }
 
 /** Pointer picking and accessible keyboard component selection. */
@@ -1140,25 +986,26 @@ function renderComponents(cv) {
             ? `${(c.worstRatio * 100).toFixed(0)}% of limit \u00b7 ${ruleTitle(c.causes[0]?.rule ?? c.rulesEvaluated[0])}`
             : c.state === 'no_rule' ? 'signal arriving, no rule evaluates it'
               : c.state === 'blind' ? 'its sensor stopped reporting' : '';
-        return `<button class="pc-row${focusComp === c.id ? ' on' : ''}" data-comp="${esc(c.id)}"
-                        aria-pressed="${focusComp === c.id}">
+        const tag = canInspectComponent(c.id, cv) ? 'button' : 'div';
+        return `<${tag} class="pc-row${focusComp === c.id ? ' on' : ''}" data-comp="${esc(c.id)}"
+                        ${tag === 'button' ? `aria-pressed="${focusComp === c.id}"` : ''}>
           <span class="pc-dot" style="background:${col}"></span>
           <span class="pc-name">${esc(c.label)}</span>
           ${wearBar(c.worstRatio)}
           <span class="pc-state" style="color:${VAGUE.has(c.state) ? RISK_COLOR.unknown : col}">${COMP_WORD[c.state] ?? c.state}</span>
           <span class="pc-note">${esc(note)}</span>
-        </button>`;
+        </${tag}>`;
       }).join('')}
     </div>`).join('') || '<div class="empty-note">No components match. Try another name or filter.</div>';
 
-  for (const b of el.querySelectorAll('.pc-row')) {
+  for (const b of el.querySelectorAll('button.pc-row')) {
     b.onclick = () => {
       selectComponent(b.dataset.comp);
       $('machine').scrollIntoView({ block: 'start' });
     };
   }
 
-  if (focusedId) [...el.querySelectorAll('.pc-row')].find(b => b.dataset.comp === focusedId)?.focus({ preventScroll: true });
+  if (focusedId) [...el.querySelectorAll('button.pc-row')].find(b => b.dataset.comp === focusedId)?.focus({ preventScroll: true });
   renderComponentDetail(cv);
   const un = fixed.filter((c) => c.state === 'unmonitored').length;
   $('componentSrc').textContent = `${fixed.length - un}/${fixed.length} instrumented`;
@@ -1238,14 +1085,16 @@ function renderComponentDetail(cv) {
   $('modelMode').textContent = c ? 'COMPONENT INSPECTION / surrounding structure dimmed' : 'INTERACTIVE ASSET VIEW';
   if (!c) return;
   $('componentTitle').textContent = c.label;
+  const partContext = ROLLER_COMPONENTS.has(c.id) ? '<p class="component-message">RPM uses the existing Hall sensor reading (Belt RPM). It is not a separate measurement of each roller.</p>' : '';
+  const damage = c.joint ? visionDamageReadings(cv.joints.find(j => `joint:${j.id}` === c.id)) : [];
   const color = VAGUE.has(c.state) ? RISK_COLOR.unknown : compColor(c.state);
-  const linked = (c.watch ?? c.watching ?? []).map(key => [key, cv.channels[key]]);
+  const linked = inspectionChannels(c).map(key => [key, cv.channels[key]]);
   const readings = linked.map(([key, channel]) => {
     const live = channel?.state === 'live' && gatewayLive();
     const value = live ? num(channel.value, decimals(channel.unit)) : null;
     return `<div><dt>${esc(channel?.label ?? key)}</dt><dd>${value === null ? 'NO SIGNAL' : `${value} ${esc(channel.unit)}`}<small>${live ? 'LIVE' : 'UNAVAILABLE'} &middot; ${ago(channel?.ts)}</small></dd></div>`;
   }).join('');
-  $('componentDetailBody').innerHTML = `<div class="component-health"><strong class="component-status" style="color:${color}">${esc(COMP_WORD[c.state] ?? c.state)}</strong>${componentHealthHTML(c, true)}<div class="tip-cov">${c.rulesEvaluated.length} rules evaluated &middot; ${c.alarmCount ?? 0} open alarms</div></div>
+  $('componentDetailBody').innerHTML = `${partContext}${damage.length ? `<figure class="vision-damage"><svg viewBox="0 0 240 72" width="240" height="72" role="img" aria-label="Schematic wear and tear indicator"><rect x="2" y="4" width="236" height="64" rx="8" fill="#303940"/><path d="M20 40 L57 27 L94 43 L131 25 L167 41 L219 30" fill="none" stroke="#efaa55" stroke-width="3"/></svg><figcaption><strong>Vision-reported wear &amp; tear</strong><p>${damage.map(d => `${esc(d.label)}: ${d.value.toFixed(1)} mm`).join(' &middot; ')}</p><small>Schematic indicator; shape and location are not measured. Last joint update: ${ago(cv.joints.find(j => `joint:${j.id}` === c.id)?.last_ts)}</small></figcaption></figure>` : ''}<div class="component-health"><strong class="component-status" style="color:${color}">${esc(COMP_WORD[c.state] ?? c.state)}</strong>${componentHealthHTML(c, true)}<div class="tip-cov">${c.rulesEvaluated.length} rules evaluated &middot; ${c.alarmCount ?? 0} open alarms</div></div>
     <div>${c.joint ? `<p class="component-message">${c.passes ?? 0} recorded passes &middot; Last seen ${ago(cv.joints.find(j => `joint:${j.id}` === c.id)?.last_ts)}</p>` : ''}${readings ? `<dl class="component-readings">${readings}</dl>` : '<p class="component-message">No live sensor channels are assigned to this component.</p>'}
     ${c.joint ? '<button class="ghost-btn" id="componentJointRecord">Open joint history</button>' : ''}</div>`;
   if (c.joint) $('componentJointRecord').onclick = () => openDrawer(c.id.slice(6));
@@ -1267,7 +1116,7 @@ function moveCamera(target) {
 }
 
 function selectComponent(id) {
-  if (!compIndex[id]) return;
+  if (!compIndex[id] || !canInspectComponent(id, lastCv)) return;
   // Re-selecting the inspected part toggles back to the full conveyor,
   // using the same camera and control reset as the Reset button.
   if (focusComp === id) {
@@ -1275,6 +1124,7 @@ function selectComponent(id) {
     return;
   }
   focusComp = id;
+  if ($('modelPartSelect')) $('modelPartSelect').value = id;
   hideCompTip();
   const points = partPoints[id] ?? PART_ANCHOR[id]?.();
   if (points?.length) {
@@ -1293,6 +1143,7 @@ function selectComponent(id) {
 
 function resetComponent(view = HOME) {
   focusComp = null;
+  if ($('modelPartSelect')) $('modelPartSelect').value = '';
   hideCompTip();
   moveCamera({ ...HOME, ...view });
   if (lastCv) renderComponents(lastCv);
@@ -1324,28 +1175,37 @@ function hideCompTip() {
 // length becomes 40 m of depth. These numbers were measured from the rendered
 // bounding box at each angle, not guessed.
 const VIEWS = {
-  iso: { yaw: -0.66, pitch: 0.36, dist: 1420, cx: 389, cy: 194 },
+  iso: { yaw: -0.45, pitch: 0.42, dist: 1250, cx: 436, cy: 210 },
   side: { yaw: 0, pitch: 0.08, dist: 1020, cx: 446, cy: 207 },
   top: { yaw: -0.04, pitch: 1.06, dist: 1100, cx: 448, cy: 238 },
-  head: { yaw: -1.26, pitch: 0.30, dist: 1367, cx: 356, cy: 190 },
+  head: { yaw: -1.26, pitch: 0.30, dist: 1490, cx: 386, cy: 174 },
   tail: { yaw: 1.26, pitch: 0.30, dist: 1161, cx: 475, cy: 146 },
 };
+
+function populateSensorComponents() {
+  const select = $('modelPartSelect');
+  if (!select) return;
+  const query = ($('modelPartSearch').value ?? '').trim().toLowerCase();
+  const available = Object.values(compIndex).filter(c => canInspectComponent(c.id, lastCv));
+  const matching = available.filter(c => c.label.toLowerCase().includes(query));
+  select.innerHTML = '<option value="">Select a sensor-linked component...</option>' + matching.map(c =>
+    `<option value="${esc(c.id)}">${esc(c.label)}${c.joint ? ' / Wear &amp; tear' : ''}</option>`).join('');
+  select.value = focusComp ?? '';
+  $('modelPartCount').textContent = `${matching.length} of ${available.length} components`;
+}
 
 /** Orbit control, wired once the DOM exists. */
 function initSchematic() {
   const svg = $('schematic');
   if (!svg) return;
+  $('modelPartSearch').addEventListener('input', populateSensorComponents);
+  $('modelPartSelect').addEventListener('change', e => { if (e.target.value) selectComponent(e.target.value); });
   attachModelFullscreen($('machine'), $('modelFullscreen'), requestDraw);
   // Keep joint records accessible in the browser's fullscreen top layer.
   $('machine').append($('scrim'), $('drawer'));
   $('modelLabels').onclick = () => {
     const b = $('modelLabels');
     b.setAttribute('aria-pressed', String(b.getAttribute('aria-pressed') !== 'true'));
-    requestDraw();
-  };
-  $('modelTextures').onclick = () => {
-    const button = $('modelTextures');
-    button.setAttribute('aria-pressed', String(button.getAttribute('aria-pressed') !== 'true'));
     requestDraw();
   };
   for (const [id, factor] of [['modelZoomIn', 1.18], ['modelZoomOut', 1 / 1.18]]) {
