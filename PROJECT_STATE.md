@@ -47,6 +47,10 @@ The working tree now differs from checkpoint 2. The older archives remain intact
 
 ---
 
+**`CLAUDE.md` in the repo root is now the central brain** — the map, the
+decision record and the known-issue register. Read that first; this file is the
+append-only checkpoint log behind it.
+
 Read this first in any new session. It records what exists, what was changed on
 13 Sept, how each change was verified, what is still open, and how to return to
 either checkpoint.
