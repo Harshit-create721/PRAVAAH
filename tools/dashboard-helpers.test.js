@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { axisRange, formatTime, humanReason, nodeName, sustainedML, ruleTitle, RULE_TEXT } from '../web/dashboard-ui.js';
+import { axisRange, formatTime, humanReason, nodeName, sustainedML, ruleTitle, RULE_TEXT,
+  gapReason, alarmAlert, alarmStates } from '../web/dashboard-ui.js';
 
 test('axis range keeps a minimum span so a steady belt does not look unstable', () => {
   const [lo, hi] = axisRange([20.37, 20.5, 20.69]);
@@ -57,4 +58,56 @@ test('every rule has a readable title; rules needing hardware say what they need
   assert.equal(ruleTitle('crack_growth_rate'), 'Crack growth rate');
   for (const rule of ['slip_ratio', 'motor_overcurrent', 'speed_deviation']) assert.ok(RULE_TEXT[rule].needs);
   assert.ok(!/config|pulleyDiameterMm|_/.test(RULE_TEXT.slip_ratio.needs));
+});
+
+test('a coverage gap reports the reason the gateway gave, not a canned hardware shopping list', () => {
+  // Permanent gap: the gateway names the unset config field, so the
+  // plain-language sentence is the whole truth.
+  assert.equal(gapReason('slip_ratio', 'needs pulleyDiameterMm and gearRatio in config, plus motor_rpm'),
+    RULE_TEXT.slip_ratio.needs);
+  assert.equal(gapReason('motor_overcurrent', 'needs driveRatedCurrentA in config, plus motor_current_rms'),
+    RULE_TEXT.motor_overcurrent.needs);
+
+  // Transient gap: the hardware is fitted and configured, the belt is just
+  // stopped. Telling the operator to buy a speed sensor would be false.
+  assert.equal(gapReason('slip_ratio', 'belt stopped or belt_speed missing'),
+    'belt stopped or belt_speed missing');
+  // Sensor fitted and rated current set; only the live channel is absent.
+  assert.equal(gapReason('motor_overcurrent', 'needs motor_current_rms'), 'needs motor_current_rms');
+  assert.equal(gapReason('speed_deviation', 'needs motor_rpm from the Hall sensor'),
+    'needs motor_rpm from the Hall sensor');
+
+  // Rules with no canned text always pass the gateway's reason through.
+  assert.equal(gapReason('crack_growth', 'needs 6 measured passes (have 2)'), 'needs 6 measured passes (have 2)');
+  assert.equal(gapReason('slip_ratio', undefined), '');
+});
+
+test('an escalation re-alerts even after the operator acknowledged the alarm', () => {
+  const planned = [{ id: 1, level: 'planned_inspection', message: 'High vibration', ack_ts: null }];
+  // First paint never chimes about alarms that were already open.
+  assert.equal(alarmAlert(null, planned), false);
+
+  const seen = alarmStates(planned);
+  assert.equal(alarmAlert(seen, planned), false);
+
+  // Acknowledged and unchanged: stay quiet.
+  const acked = [{ id: 1, level: 'planned_inspection', message: 'High vibration', ack_ts: 1000 }];
+  assert.equal(alarmAlert(alarmStates(acked), acked), false);
+
+  // The gateway escalates in place and leaves ack_ts set. This is the case
+  // that was silent before, and it is the loudest thing the dashboard has.
+  const escalated = [{ id: 1, level: 'critical', message: 'High vibration', ack_ts: 1000 }];
+  assert.equal(alarmAlert(alarmStates(acked), escalated), true);
+
+  // De-escalation and a mere re-wording of an acked alarm stay quiet.
+  assert.equal(alarmAlert(alarmStates(escalated), acked), false);
+  const reworded = [{ id: 1, level: 'planned_inspection', message: 'High vibration 1.4 g', ack_ts: 1000 }];
+  assert.equal(alarmAlert(alarmStates(acked), reworded), false);
+
+  // An unacknowledged alarm still alerts on a new id or a changed message.
+  assert.equal(alarmAlert(seen, [...planned, { id: 2, level: 'observe', message: 'Belt off-track', ack_ts: null }]), true);
+  assert.equal(alarmAlert(seen, [{ id: 1, level: 'planned_inspection', message: 'changed', ack_ts: null }]), true);
+
+  // An unknown level cannot masquerade as an escalation.
+  assert.equal(alarmAlert(alarmStates(acked), [{ id: 1, level: 'bogus', message: 'x', ack_ts: 1000 }]), false);
 });

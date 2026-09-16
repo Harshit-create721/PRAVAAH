@@ -1,6 +1,7 @@
 import {
   attachModelFullscreen, filterComponents, historyCSV, axisRange, formatTime, nodeName,
   humanReason, sustainedML, RULE_TEXT, ruleTitle, ENGINEERING_CHANNELS,
+  gapReason, alarmAlert, alarmStates,
 } from './dashboard-ui.js';
 import { statusReportHTML } from './readiness.js';
 import { motionReading, advanceMotion, motionFaces, miningMaterialFaces, rollerMotionFaces } from './belt-motion.js';
@@ -1736,7 +1737,7 @@ async function loadAlarmHistory() {
 
 let audio = null;
 let soundOn = storage.get('pravaah.sound') !== 'off';
-let knownAlarms = null; // id -> "level|message"
+let knownAlarms = null; // id -> { level, message }
 function syncSoundButton() {
   $('soundToggle').setAttribute('aria-pressed', String(soundOn));
   $('soundToggle').textContent = soundOn ? 'Sound on' : 'Sound off';
@@ -1775,8 +1776,8 @@ function chime(times = 3) {
 }
 
 function alertOnChange(alarms) {
-  const current = new Map(alarms.map((a) => [a.id, `${a.level}|${a.message}`]));
-  if (knownAlarms && alarms.some((a) => !a.ack_ts && knownAlarms.get(a.id) !== current.get(a.id))) {
+  const current = alarmStates(alarms);
+  if (alarmAlert(knownAlarms, alarms)) {
     chime(3);
     document.body.classList.remove('alarm-flash');
     void document.body.offsetWidth; // restart the animation
@@ -1837,7 +1838,7 @@ function renderGaps(cv) {
   el.innerHTML = [...gaps].map(([key, why]) => {
     const [joint, rule] = key.includes(':') ? key.split(':') : [null, key];
     return `<div class="gap"><div class="gap-rule">${esc(ruleTitle(rule))}${joint ? ` · joint ${esc(joint)}` : ''}</div>
-      <div class="gap-why">${esc(RULE_TEXT[rule]?.needs ?? why)}</div></div>`;
+      <div class="gap-why">${esc(gapReason(rule, why))}</div></div>`;
   }).join('');
 }
 

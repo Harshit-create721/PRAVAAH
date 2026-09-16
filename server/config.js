@@ -55,10 +55,18 @@ export default {
   conveyors: [
     {
       id: 'CV-01',
-      label: 'Bench test conveyor',
+      label: 'Iron ore conveyor',
       // Which physical machine the 3D view and part roster describe:
       // 'bench' = the flat-belt demo rig (photo in ConveryBelt/),
       // 'mining' = a troughed mining conveyor (target deployment).
+      //
+      // Deliberately 'mining': SIH26008 is an iron ore conveyor problem, so the
+      // twin models the target machine rather than the pilot rig the sensors are
+      // bolted to. `siteLabel` ("Pilot test rig") is what discloses where the
+      // measurements actually come from - keep that honest, and do NOT name this
+      // conveyor after the bench. Calling it "Bench test conveyor" next to the
+      // mining roster reads as a claim that the 1.2 m bench loop has a loading
+      // chute, impact idler sets and a pull-cord. It does not.
       model: 'mining',
 
       // --- Measured geometry. Fill these in from the rig. ---

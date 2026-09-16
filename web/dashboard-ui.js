@@ -112,6 +112,58 @@ export const RULE_TEXT = {
 export const ruleTitle = (rule) => RULE_TEXT[rule]?.title
   ?? String(rule ?? 'Rule').replace(/_/g, ' ').replace(/^./, (c) => c.toUpperCase());
 
+/**
+ * What to tell the operator about a rule that did not evaluate.
+ *
+ * `RULE_TEXT[rule].needs` is the plain-language version of a PERMANENT gap:
+ * hardware that is not fitted plus a setting that is not filled in. rules.js
+ * reports transient reasons for those same rules - "belt stopped or belt_speed
+ * missing", "needs motor_rpm from the Hall sensor" - and printing the canned
+ * sentence for one of those tells an operator to go buy a sensor that is
+ * already bolted to the machine.
+ *
+ * The gateway marks the full permanent gap by naming the unset config field
+ * ("... in config"), so that is the only case where the friendly text is the
+ * whole truth. Everything else shows the reason the gateway actually gave.
+ */
+export function gapReason(rule, why) {
+  const reason = String(why ?? '');
+  const needs = RULE_TEXT[rule]?.needs;
+  return needs && /\bin config\b/.test(reason) ? needs : reason;
+}
+
+// Severity ladder for alarm levels. An unknown level sorts lowest so a
+// malformed one can never masquerade as an escalation.
+const ALARM_RANK = { observe: 0, planned_inspection: 1, urgent_inspection: 2, critical: 3 };
+const alarmRank = (level) => ALARM_RANK[level] ?? -1;
+
+/** Snapshot of what is currently on screen, for the next alarmAlert() call. */
+export const alarmStates = (alarms) =>
+  new Map(alarms.map((a) => [a.id, { level: a.level, message: a.message }]));
+
+/**
+ * Should this alarm list interrupt the operator (chime + screen flash)?
+ *
+ * `previous` is the map from the last render, or null on first paint - a
+ * freshly opened dashboard never chimes about alarms that were already there.
+ *
+ * An acknowledged alarm stays silent at the level the operator accepted. But
+ * the gateway escalates open alarms IN PLACE (store.updateAlarm rewrites the
+ * level and leaves ack_ts set), and a fault getting materially worse is the
+ * loudest thing this dashboard has to say. So an escalation re-alerts even
+ * after acknowledgement - which is exactly the case where somebody has
+ * already looked away.
+ */
+export function alarmAlert(previous, alarms) {
+  if (!previous) return false;
+  return alarms.some((a) => {
+    const was = previous.get(a.id);
+    if (was && alarmRank(a.level) > alarmRank(was.level)) return true;
+    if (a.ack_ts) return false;
+    return !was || was.level !== a.level || was.message !== a.message;
+  });
+}
+
 /** Channels kept behind "Engineering detail": useful for diagnosis, noise for a first read. */
 export const ENGINEERING_CHANNELS = new Set(['vibration_kurtosis', 'acceleration_x', 'acceleration_y',
   'acceleration_z', 'acceleration_magnitude', 'ambient']);
